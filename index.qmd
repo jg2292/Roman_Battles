@@ -1,9 +1,9 @@
 ---
-title: "Coup-Proofing via Capital Relocation"
-subtitle: "PPOL 6805 / DSAN 6750: GIS for Spatial Data Science"
+title: "The Spatial Geography of Roman Warfare"
+subtitle: "Battle Locations, Territorial Boundaries, Settlements, and Military Infrastructure"
 authors:
-  - name: Jeff Jacobs
-    email: jj1088@georgetown.edu
+  - name: John Grace
+    email: jg2292@georgetown.edu
     affiliation: Georgetown University
     corresponding: true
 df-print: kable
@@ -11,6 +11,22 @@ bibliography: GIS_Manuscript.bib
 csl: chicago-17-no-url.csl
 title-block-banner: "#E69F0095"
 title-block-banner-color: "black"
+date: today
+abstract: |
+  This study examines the spatial distribution of Roman battles and
+  investigates the relationship between military conflict, settlement
+  patterns, territorial boundaries, and specialized infrastructure
+  across the Roman world. Using georeferenced battle locations,
+  historical territorial boundary reconstructions, and settlement
+  records from the Pleiades Gazetteer, the study applies spatial
+  statistical methods and Monte Carlo simulations to evaluate whether
+  battle locations exhibit patterns beyond those expected under
+  alternative spatial distributions. Particular attention is given to
+  differences between external conflicts and internal Roman civil
+  conflicts. The analysis considers spatial randomness, settlement
+  intensity, proximity to territorial boundaries, and proximity to
+  military and civic infrastructure.
+
 format:
   html:
     df-print: kable
@@ -23,115 +39,445 @@ format:
 prefer-html: true
 ---
 
-## Introduction
 
-Several previous studies have found robust relationships between spatial properties of a country's **capital city** and that country's propensity for ethnic and political **conflict** and **"instability"**.
+# 1. Introduction
 
-Perceptions of this linkage also have an effect on "coup-proofing" decisions made by national governments. A recent BBC interview with Equatorial Guinea's President Teodoro Obiang, for example, highlighted this as a factor behind his decision to relocate the capital city:
+Warfare was a fundamental component of the political, territorial,
+and administrative development of the Roman world. Military
+engagements occurred across a geographically extensive territory,
+ranging from the Italian peninsula and western Mediterranean to
+the frontiers of northern Europe, North Africa, and the eastern
+Mediterranean.
 
-> It's the remoteness of Oyala that makes it so appealing to President Obiang. In a rare interview he described how rebels had recently plotted a seaborne assault on his palace in the current capital, Malabo. 'We need a secure place for my government and for future governments. That's why we have created Oyala, to guarantee the government of Equatorial Guinea.' [@sackur_equatorial_2012]
+Although the historical circumstances of individual battles have
+received considerable scholarly attention, their collective
+geographic distribution offers another perspective on the
+relationship between warfare and the spatial organization of
+Roman territory.
 
-This case is far from exceptional, as an even more recent *Washington Post* article points out with respect to Myanmar's decision to move its capital from Yangon to Naypyidaw:
+Battle locations were not necessarily distributed randomly across
+the landscape. Military engagements may have been influenced by
+the location of established settlements, the boundaries of Roman
+territorial control, and the presence of specialized infrastructure
+such as forts. Similarly, internal conflicts may have exhibited
+different geographic characteristics from conflicts involving
+external opponents.
 
-> Analysts have described the decision as motivated by a desire to secure the military’s seat of power from any threat of protests or invasions. [@berger_myanmars_2021]
+Historical Geographic Information Systems (GIS) provide an
+opportunity to investigate these relationships quantitatively.
+By combining georeferenced battle records with reconstructed
+historical boundaries and settlement data, it is possible to
+evaluate whether observed battle locations exhibit spatial
+patterns consistent with particular geographic features.
 
-Most of these studies, however, are based on observations of **conflict events**. In this study, we study the more fundamental variable of a capital's distance from the **population centroid** of the country.
+This study investigates the spatial distribution of Roman battles
+through a series of spatial statistical tests and Monte Carlo
+simulations. Rather than assuming that a single geographic factor
+explains the location of military engagements, the analysis
+compares several alternative spatial models.
 
-## Literature Review
+The primary objectives are:
 
-@campante_capital_2019 analyzes the relationship between the distance to a **capital city** and the **appearance of conflict** in a given country. Their two key findings are that:
+1. Determine whether Roman battle locations exhibit significant
+   spatial clustering relative to complete spatial randomness.
+2. Evaluate whether the distribution of battles is associated
+   with the historical distribution of settlements.
+3. Investigate whether battles occurred disproportionately close
+   to the territorial boundaries of Roman control.
+4. Examine whether external conflicts and civil conflicts exhibit
+   different spatial relationships with military and civic
+   infrastructure.
 
-> Conflict is more likely to emerge (and dislodge incumbents) closer to the capital
+By examining these relationships together, this study seeks to
+better understand the geographic characteristics of Roman
+warfare and the relationship between military activity and the
+historical Roman landscape.
 
-and
+# 2. Research Questions and Hypotheses
 
-> Isolated capitals are associated with misgovernance.
+The analysis is organized around four primary research questions.
 
-This first finding is illustrated in @fig-conflict-dist.
+## 2.1 Spatial Clustering
 
-![The "core" finding in @campante_capital_2019, where the probability of conflict decreases with distance from a national capital, and where this effect is *greater* for less-dense states.](images/conflict_dist.svg){#fig-conflict-dist}
+The first question examines whether Roman battles exhibit
+geographic clustering beyond what would be expected if battle
+locations were distributed randomly throughout the study area.
 
-Within the political economy literature, a series of studies starting with @nunn_ruggedness_2012 have shown how the effects of geospatial features like "terrain ruggedness" can differ wildly (e.g., can flip signs) between African and non-African states due to the history of slave-raiding and its effect on societal levels of trust [@nunn_slave_2011]. @herbst_states_2000 thus "zooms in" specifically on the effect of capital-to-population distance on political instability within Sub-Saharan Africa.
+- **H0:** Battle locations follow a spatially random distribution
+  within the defined study area.
+- **H1:** Battle locations exhibit significant spatial clustering.
 
-This historically-informed focus on postcolonial state-building provides a more nuanced view, wherein the single independent variable (distance to national capital) used in studies like @campante_capital_2019 is disaggregated into something like "distribution of major population centers relative to national capital".
+This hypothesis is evaluated using mean nearest-neighbor distance
+and Monte Carlo simulations of randomly generated battle
+locations.
 
-This disaggregation, in turn, allows **first-order** and **second-order** GIS measures to be used to define and test hypotheses about the relationship between geography and political instability. First, "population centers" are defined based on first-order **population intensity functions**: subregions whose mean population intensity is above a certain threshold are interpreted as potentially "rebellious" population centers, over which that the central government in the capital aims to maximize control^[Sociologically, @herbst_states_2000 thus follows the "Weberian" definition of the state, as the entity possessing a monopoly over the legally-legitimized use of violence over a certain territory [@weber_vocation_1919].]. The *difficulty* of exerting this control is then defined based on a second-order **pairwise correlation functions**, where greater average distances between *pairs* of population centers are hypothesized to cause greater instability.
+## 2.2 Settlement Association
 
-As shown in @fig-5-2, for example, @herbst_states_2000 classifies the Democratic Republic of the Congo as a state with "difficult" population density based on these criteria, since the **capital** and largest city (Kinshasa) in the far west of the country is extremely distant from the next two largest cities (Mbuji-Mayi near the direct center and Lubumbashi in the far southeast). In contrast, Benin's population density is classified as "favorable", as density decreases with almost perfect exponential decay per increase in distance from the capital (Porto-Novo) and largest city (Cotonou), both in the far south of the country.
+The second question examines whether the geographic distribution
+of battles is associated with the historical distribution of
+settlements.
 
-:::: {layout="[1,1]" layout-align="center"}
+- **H0:** Battle locations are consistent with a spatial
+  distribution based on settlement intensity.
+- **H1:** Battle locations exhibit greater spatial clustering
+  than expected under the settlement-based spatial model.
 
-![Example countries with population distributions classified as "favorable" (with respect to centralized state power and stability) in @herbst_states_2000](images/fig5-2.svg){#fig-5-2 fig-align="center"}
+A kernel density estimation (KDE) surface derived from
+historically documented settlements is used to construct the
+expected spatial distribution of battle locations.
 
-![Example countries with population distributions classified as "difficult" (with respect to centralized state power and stability) in @herbst_states_2000](images/fig5-4.svg){#fig-5-4 fig-align="center"}
+## 2.3 Territorial Boundary Association
 
-::::
+The third question investigates whether Roman battles occurred
+unusually close to the territorial boundaries of Roman control.
 
-## Methodology
+- **H0:** Battle locations are consistent with the distance
+  distribution generated by the settlement-based spatial model.
+- **H1:** Battle locations occur closer to historical territorial
+  boundaries than expected under the settlement-based model.
 
-The **population centroids** we use herein might require some explanation, since the term "centroid" can be ambiguous. Here, we draw on the population centroid definition (along with the data) used in @hall_population_2019.
+This analysis compares observed distances to historical
+territorial perimeters against simulated battle locations
+generated under settlement-based and boundary-weighted
+distributions.
 
-## Exploratory Data Analysis (EDA)
+## 2.4 Military and Civic Infrastructure
 
-Here we plot the base GIS objects we're analyzing: the location of each **capital city** (in purple) and each **population centroid** (in yellow).
+The fourth question investigates whether different categories
+of Roman conflict exhibit distinct relationships with
+specialized infrastructure.
 
-```{r}
-#| label: imports
-library(tidyverse) |> suppressPackageStartupMessages()
-library(sf) |> suppressPackageStartupMessages()
-library(mapview) |> suppressPackageStartupMessages()
-# Fixes "API Key Required" message
-mapviewOptions(basemaps = c("Esri.WorldGrayCanvas","Stadia.AlidadeSmoothDark","OpenStreetMap", "Esri.WorldImagery", "OpenTopoMap"))
-library(units) |> suppressPackageStartupMessages()
-cb_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
-```
+The analysis focuses on two relationships:
 
-```{r}
-#| label: load-eda
-merged_long_sf <- readRDS("data/merged_long_sf.rds")
-mapview(merged_long_sf, zcol="name", cex=4, label="geounit")
-```
+- **External conflicts:** Association with military forts.
+- **Civil conflicts:** Association with entertainment
+  infrastructure, including amphitheaters and theaters.
 
-We then construct an **area-normalized** measure of capital-centroid distance $\text{dist}^{\textsf{AN}}$, using the formula
+The null hypothesis is that battle locations are consistent
+with a general settlement-based spatial distribution, without
+additional proximity to the infrastructure being examined.
 
-$$
-\text{dist}^{\textsf{AN}}_i = \text{dist}_i / \sqrt{\text{area}_i}.
-$$
+The alternative hypothesis is that the relevant category of
+battle exhibits greater proximity to its associated
+infrastructure than expected under the settlement-based model.
 
-A plot of this measure by country looks as follows:
+# 3. Data and Study Area
 
-```{r}
-#| label: plot-area
-merged_area_sf <- readRDS("data/merged_area_sf.rds")
-# Uncomment to export to geojson
-# merged_area_sf |> st_write("data/merged_area_sf.geojson")
-mapview(merged_area_sf, zcol="scaled_dist")
-```
+## 3.1 Roman Battle Locations
 
-If the data was too big for `mapview`, the following is the same map hosted on ArcGIS and embedded here:
+The primary dataset consists of georeferenced battle records
+associated with Roman military history.
 
-<!-- Add custom element to <body> of your page -->
-<arcgis-embedded-map style="height:600px;width:100%;" item-id="138b4cf3f5e54863bd76d97b515124b1" theme="light" heading-enabled legend-enabled share-enabled center="12.539048194882033,32.107397539485724"scale="147914381.8978885" portal-url="https://georgetownuniv.maps.arcgis.com"></arcgis-embedded-map>
+Battle records were collected using Wikidata and subsequently
+reviewed to determine whether Rome was involved in each
+engagement. The resulting dataset includes battle identifiers,
+names, dates, classifications, and associated geographic
+locations.
 
-## Hypothesis Testing (Regression)
+Each battle is assigned to one of two classifications:
 
-```{r}
-#| label: load-regression-data
-merged_sub_sf <- readRDS("data/merged_sub_sf.rds")
-merged_sub_sf |> head()
-```
+- **External:** Conflicts involving Rome and external opponents.
+- **Civil Conflict:** Conflicts involving internal Roman
+  political or military factions.
 
-```{r}
-#| label: plot-regression
-merged_sub_sf |> ggplot(aes(x=scaled_dist, y=total_score, label=NAME_ENGLI)) +
-  geom_point() +
-  geom_smooth(method='lm', formula= y~x) +
-  geom_text(size=4, nudge_y = 0.075) +
-  theme_classic()
-```
+Battle locations are represented using geographic coordinates
+and converted into spatial point geometries for subsequent
+analysis.
 
-## Discussion
+Because individual battles may have multiple associated
+location records, the analysis distinguishes between
+battle-location records and unique battles. Analyses using
+multiple location records retain the associated geographic
+observations, while the later classification-based
+nearest-neighbor analysis constructs one representative point
+per unique battle.
 
-## Conclusion
+## 3.2 Historical Roman Territorial Boundaries
 
-Our evidence indicates that the spatial dynamics of **conflict** differ from the spatial dynamics of **misgovernance**.
+Historical territorial boundaries are used to represent the
+geographic extent of Roman control at different points in time.
+
+Nine boundary reconstructions are included:
+
+| Historical snapshot | Year |
+|---|---:|
+| 264 BC | -264 |
+| 133 BC | -133 |
+| 60 BC | -60 |
+| 44 BC | -44 |
+| 14 AD | 14 |
+| 69 AD | 69 |
+| 117 AD | 117 |
+| 200 AD | 200 |
+| 314 AD | 314 |
+
+Each battle is assigned to the nearest available historical
+boundary snapshot based on its recorded year.
+
+This approach allows battle locations to be compared against
+a temporally corresponding reconstruction of Roman territory.
+However, the snapshots are approximations of territorial
+conditions rather than continuous representations of Roman
+expansion and contraction.
+
+## 3.3 Settlement Data
+
+Settlement information is obtained from the Pleiades Gazetteer,
+a historical geographic resource documenting locations
+associated with the ancient world.
+
+The settlement dataset includes geographic coordinates,
+feature classifications, and temporal attributes.
+
+Two temporal attributes are particularly important:
+
+- `MINDATE`: Earliest associated date.
+- `MAXDATE`: Latest associated date.
+
+These attributes are used to construct historical settlement
+datasets corresponding to the nine Roman territorial snapshots.
+
+A settlement is included in a historical period when its
+recorded date range contains the year of that snapshot.
+
+The settlement dataset also includes specialized feature
+classifications, allowing the analysis to distinguish between
+general settlements and particular types of infrastructure.
+
+These include ports, temples, forts, amphitheaters, and
+theaters.
+
+## 3.4 Geographic Study Area
+
+The geographic study area is defined using the Roman territorial
+boundary reconstruction from 314 AD.
+
+The boundary geometry is combined and projected into an
+azimuthal equidistant coordinate reference system centered
+approximately on the Mediterranean region.
+
+A 500-kilometer buffer is then constructed around the
+territorial boundary.
+
+This buffered area provides a consistent geographic extent
+for the spatial simulations while allowing the inclusion of
+battle locations outside the Roman Empire's territorial
+boundaries.
+
+Settlement and battle records are restricted to this study
+area before the primary spatial analyses.
+
+# 4. Methodology
+
+## 4.1 Spatial Data Preparation
+
+All geographic datasets are transformed into a common
+projected coordinate reference system to support distance
+calculations in meters.
+
+Battle coordinates are converted into spatial point
+geometries, and records without valid geographic coordinates
+are excluded.
+
+Settlement records are restricted to valid point geometries
+within the defined study area.
+
+The resulting datasets provide the spatial foundation for
+the subsequent statistical analyses.
+
+## 4.2 Monte Carlo Simulation Framework
+
+The primary statistical approach uses Monte Carlo simulations
+to compare observed battle distributions against alternative
+spatial models.
+
+Each simulation generates a synthetic distribution of battle
+locations while preserving the number of observed
+battle-location records or unique battles, depending on
+the specific analysis.
+
+A total of 999 simulations are performed for the principal
+models.
+
+The resulting distributions provide an empirical estimate
+of the spatial statistic expected under each null model.
+
+For lower-tail tests, the empirical Monte Carlo p-value is
+calculated as:
+
+\[
+p = \frac{b+1}{R+1}
+\]
+
+where:
+
+- \(b\) is the number of simulated statistics at least as
+  extreme as the observed statistic.
+- \(R\) is the total number of simulations.
+
+For the principal analyses, \(R=999\), producing a minimum
+attainable empirical p-value of 0.001.
+
+## 4.3 Spatial Randomness
+
+The first model evaluates whether battle locations are
+more spatially clustered than would be expected under
+complete spatial randomness.
+
+The observed mean nearest-neighbor distance is calculated
+using a k-d tree to identify the nearest other battle
+location for each observation.
+
+Random battle patterns are generated by uniformly sampling
+locations within the buffered study area.
+
+The mean nearest-neighbor distance is calculated for each
+simulated pattern and compared against the observed
+statistic.
+
+Smaller nearest-neighbor distances indicate greater
+spatial clustering.
+
+## 4.4 Settlement-Based Spatial Model
+
+The settlement-based model evaluates whether the observed
+geographic distribution of battles can be explained by
+the spatial distribution of historically documented
+settlements.
+
+Kernel density estimation is used to construct a continuous
+settlement intensity surface.
+
+A Gaussian kernel is applied with a bandwidth of 50
+kilometers. The intensity surface is evaluated over a
+20-kilometer spatial grid covering the study area.
+
+Grid-cell intensity estimates are normalized into sampling
+probabilities. Simulated battle locations are then generated
+by sampling grid cells according to these probabilities.
+
+The simulated locations are used to construct an empirical
+distribution of mean nearest-neighbor distances.
+
+This model provides a more geographically constrained
+baseline than uniform random sampling because locations
+near concentrations of documented settlements receive
+greater sampling probability.
+
+The historical analysis also constructs separate
+settlement distributions for each of the nine boundary
+snapshots using the temporal attributes of the Pleiades
+records.
+
+## 4.5 Territorial Boundary Models
+
+Territorial boundary association is examined by calculating
+the shortest distance between each observed battle location
+and the corresponding historical Roman territorial
+perimeter.
+
+For each battle, the applicable perimeter is determined
+using its assigned historical boundary snapshot.
+
+The observed mean distance to the historical perimeter
+is compared against simulated distributions.
+
+Two alternative approaches are evaluated.
+
+First, the settlement-based model is used to generate
+simulated battle locations. Their distances to the
+corresponding historical perimeters establish the expected
+boundary distances under a settlement-conditioned null
+model.
+
+Second, boundary-weighted spatial distributions are
+constructed using exponential distance decay:
+
+\[
+w(d) = e^{-d/\lambda}
+\]
+
+where:
+
+- \(d\) is the distance from a grid cell to the
+  corresponding territorial perimeter.
+- \(\lambda\) is the distance-decay parameter.
+
+Four decay distances are evaluated:
+
+- 25 kilometers
+- 50 kilometers
+- 100 kilometers
+- 200 kilometers
+
+Smaller decay parameters concentrate simulated locations
+more strongly near the territorial perimeter.
+
+The observed boundary distances are compared against
+the resulting simulated distributions to evaluate
+whether the observed patterns are consistent with
+different levels of territorial boundary association.
+
+## 4.6 Military and Civic Infrastructure
+
+The infrastructure analysis investigates whether
+external conflicts and civil conflicts exhibit different
+spatial relationships with specialized settlement
+features.
+
+Four infrastructure categories are initially evaluated:
+
+- Ports
+- Temples
+- Forts
+- Entertainment facilities
+
+Entertainment facilities include amphitheaters and
+theaters.
+
+For each category, a nearest-feature spatial index is
+constructed. The observed mean distance from battle
+locations to the nearest feature is then calculated.
+
+The observed distances are compared against simulated
+battle locations generated using a background settlement
+distribution.
+
+To prevent the tested feature category from directly
+influencing its own background distribution, the
+corresponding feature type is excluded when fitting
+the background KDE.
+
+This analysis evaluates whether observed battles are
+unusually close to particular infrastructure categories
+relative to the broader settlement geography.
+
+## 4.7 Classification-Based Infrastructure Models
+
+A further model examines whether the relationship between
+battle locations and infrastructure differs between
+external and civil conflicts.
+
+The analysis uses one representative geographic point
+per unique battle, rather than treating multiple
+location records associated with the same battle as
+independent battles.
+
+External conflicts are modeled using proximity to forts,
+while civil conflicts are modeled using proximity to
+entertainment infrastructure.
+
+The model compares the observed mean nearest-neighbor
+distance within each battle classification against
+999 simulated battle patterns.
+
+Four infrastructure distance-decay parameters are
+evaluated: 25, 50, 100, and 200 kilometers.
+
+A general settlement-based model is also retained as
+a comparison baseline.
+
+This makes it possible to examine whether
+infrastructure-weighted distributions provide a
+different explanation of the observed spatial
+clustering patterns.

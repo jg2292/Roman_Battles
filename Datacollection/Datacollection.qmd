@@ -1,0 +1,646 @@
+---
+title: "Roman Military Conflict Data Collection"
+format:
+  html:
+    toc: true
+    code-fold: true
+
+---
+
+# Overview
+
+This file builds an initial dataset of Wikidata events classified directly as battles and dated between 300 BCE and 500 CE.
+
+This is a **starting candidate dataset**, not yet a complete list of Roman military conflicts. The initial query does not capture every siege, naval engagement, revolt, raid, or other military event.
+
+The workflow is deliberately split into stages:
+
+1. Find candidate event IDs with Wikidata SPARQL.
+2. Retrieve each candidate's details in batches.
+3. Build and check a GeoDataFrame.
+4. Export the initial dataset.
+
+Linked-location enrichment is intentionally left for a later stage, after this basic workflow runs successfully.
+
+# 1. Libraries and API settings
+
+```{python}
+
+import time
+import requests
+import pandas as pd
+import geopandas as gpd
+```
+
+```{python}
+# Identify this project politely to Wikidata.
+headers = {
+    "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+}
+
+wikidata_api_url = "https://www.wikidata.org/w/api.php"
+sparql_url = "https://query.wikidata.org/sparql"
+```
+
+# 2. Helper functions for extracting Wikidata claims
+
+These functions handle missing or incomplete claims without crashing the whole extraction.
+
+```{python}
+def get_claims(entity, property_id):
+    """Return all claims for a Wikidata property."""
+    return entity.get("claims", {}).get(property_id, [])
+
+
+def extract_entity_ids(entity, property_id):
+    """Return QIDs from an entity-valued property."""
+    qids = []
+
+    for claim in get_claims(entity, property_id):
+        mainsnak = claim.get("mainsnak", {})
+        datavalue = mainsnak.get("datavalue")
+
+        if not datavalue:
+            continue
+
+        if datavalue.get("type") == "wikibase-entityid":
+            value = datavalue.get("value", {})
+            qid = value.get("id")
+
+            if qid:
+                qids.append(qid)
+
+    return qids
+
+
+def extract_date(entity, property_id="P585"):
+    """Return the first available date value as a raw Wikidata time string."""
+    for claim in get_claims(entity, property_id):
+        mainsnak = claim.get("mainsnak", {})
+        datavalue = mainsnak.get("datavalue")
+
+        if not datavalue:
+            continue
+
+        value = datavalue.get("value", {})
+        date = value.get("time")
+
+        if date:
+            return date
+
+    return None
+
+
+def extract_coordinates(entity):
+    """Return latitude and longitude, or (None, None) if unavailable."""
+    for claim in get_claims(entity, "P625"):
+        mainsnak = claim.get("mainsnak", {})
+        datavalue = mainsnak.get("datavalue")
+
+        if not datavalue:
+            continue
+
+        coordinates = datavalue.get("value", {})
+        latitude = coordinates.get("latitude")
+        longitude = coordinates.get("longitude")
+
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+
+    return None, None
+
+
+def extract_wikipedia_url(entity):
+    """Return the English Wikipedia article URL, if one exists."""
+    sitelink = entity.get("sitelinks", {}).get("enwiki")
+
+    if not sitelink:
+        return None
+
+    title = sitelink.get("title")
+
+    if not title:
+        return None
+
+    # Quote the title safely for use in a URL.
+    from urllib.parse import quote
+    return "https://en.wikipedia.org/wiki/" + quote(title.replace(" ", "_"))
+
+
+def extract_event(entity, qid):
+    """Build one row of event information from a Wikidata entity."""
+    latitude, longitude = extract_coordinates(entity)
+
+    return {
+        "wikidata_id": qid,
+        "name": entity.get("labels", {}).get("en", {}).get("value"),
+        "description": entity.get("descriptions", {}).get("en", {}).get("value"),
+        "date": extract_date(entity, "P585"),
+        "location": extract_entity_ids(entity, "P276"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "part_of": extract_entity_ids(entity, "P361"),
+        "participants": extract_entity_ids(entity, "P710"),
+        "instance_of": extract_entity_ids(entity, "P31"),
+        "wikipedia_url": extract_wikipedia_url(entity),
+    }
+```
+
+# 3. Discover candidate events with SPARQL
+
+This first query selects events that have `instance of (P31) = battle (Q178561)` and a point-in-time date (P585) in the requested period.
+
+```{python}
+query = """
+SELECT DISTINCT ?event ?date
+WHERE {
+    ?event wdt:P31 wd:Q178561 ;
+           wdt:P585 ?date .
+
+    FILTER(
+        ?date >= "-0300-01-01T00:00:00Z"^^xsd:dateTime
+        &&
+        ?date < "0501-01-01T00:00:00Z"^^xsd:dateTime
+    )
+}
+LIMIT 1000
+"""
+```
+
+Run the query:
+
+```{python}
+response = requests.get(
+    sparql_url,
+    params={"query": query, "format": "json"},
+    headers=headers,
+    timeout=90,
+)
+
+print("SPARQL HTTP status:", response.status_code)
+response.raise_for_status()
+
+results = response.json()["results"]["bindings"]
+
+candidate_ids = sorted({
+    row["event"]["value"].rsplit("/", 1)[-1]
+    for row in results
+})
+
+print("Candidate rows:", len(results))
+print("Unique candidate IDs:", len(candidate_ids))
+```
+
+# 4. Retrieve candidate entities in batches
+
+The SPARQL response gives us IDs and dates. The next step retrieves the full Wikidata records, including names, locations, participants, classifications, coordinates, and Wikipedia links.
+
+This function requests up to 50 entities at a time and preserves successfully retrieved entities in `entity_cache`. If Wikidata returns a rate-limit or temporary server error, it waits before retrying. If retries for a batch fail, it stops instead of repeatedly sending requests.
+
+```{python}
+entity_cache = {}
+
+
+def fetch_entities_in_batches(qids, batch_size=50, max_attempts=5):
+    """Fetch Wikidata entities in batches, preserving successful results."""
+    for start in range(0, len(qids), batch_size):
+        batch = [
+            qid for qid in qids[start:start + batch_size]
+            if qid not in entity_cache
+        ]
+
+        if not batch:
+            continue
+
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "format": "json",
+            "props": "labels|descriptions|claims|sitelinks",
+            "languages": "en",
+            "maxlag": 5,
+        }
+
+        batch_succeeded = False
+
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(
+                    wikidata_api_url,
+                    params=params,
+                    headers=headers,
+                    timeout=60,
+                )
+
+                if response.status_code == 429 or response.status_code >= 500:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_seconds = (
+                        int(retry_after)
+                        if retry_after and retry_after.isdigit()
+                        else 60 * (attempt + 1)
+                    )
+                    print(
+                        f"Temporary HTTP {response.status_code}; "
+                        f"waiting {wait_seconds} seconds."
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                if "error" in data:
+                    error = data["error"]
+                    print("Wikidata API error:", error)
+
+                    if error.get("code") == "maxlag":
+                        wait_seconds = max(
+                            60 * (attempt + 1),
+                            int(error.get("lag", 0)) + 30
+                        )
+
+                        print(f"Wikidata is lagging. Waiting {wait_seconds} seconds.")
+                        time.sleep(wait_seconds)
+                        continue
+
+                    break
+
+                entities = data.get("entities")
+                if entities is None:
+                    print("Unexpected response; stopping this batch.")
+                    break
+
+                entity_cache.update(entities)
+                batch_succeeded = True
+                break
+
+            except (requests.RequestException, ValueError) as error:
+                print("Request failed:", error)
+                if attempt < max_attempts - 1:
+                    time.sleep(30 * (attempt + 1))
+
+        if not batch_succeeded:
+            print(f"Could not retrieve batch beginning at candidate {start}.")
+            print("Stopping. Successfully retrieved entities remain cached.")
+            break
+
+        print(f"Cached {len(entity_cache)} of {len(qids)} candidate entities")
+        time.sleep(3)
+
+    return entity_cache
+```
+
+Run the retrieval step once:
+
+```{python}
+entity_cache = fetch_entities_in_batches(candidate_ids)
+
+missing_ids = [qid for qid in candidate_ids if qid not in entity_cache]
+
+print("Entities cached:", len(entity_cache))
+print("Candidate entities still missing:", len(missing_ids))
+```
+
+If `Candidate entities still missing` is greater than zero, do not proceed as if the dataset is complete. You can rerun the retrieval function later after any rate limit clears; already cached entities will be skipped.
+
+# 5. Build the event dataset
+
+```{python}
+events = []
+
+for qid in candidate_ids:
+    entity = entity_cache.get(qid)
+
+    if not entity or "missing" in entity:
+        continue
+
+    events.append(extract_event(entity, qid))
+
+events_df = pd.DataFrame(events)
+
+print("Extracted event records:", len(events_df))
+print("Unique event IDs:", events_df["wikidata_id"].nunique())
+
+events_df.head(10)
+```
+
+# 6. Convert the records to a GeoDataFrame
+
+The coordinate fields remain in the table. Rows without coordinates will not have a usable point geometry; we will count missing coordinates directly from the latitude and longitude columns.
+
+```{python}
+battles_gdf = gpd.GeoDataFrame(
+    events_df,
+    geometry=gpd.points_from_xy(
+        events_df["longitude"],
+        events_df["latitude"],
+    ),
+    crs="EPSG:4326",
+)
+
+valid_coordinates = (
+    battles_gdf["latitude"].notna()
+    & battles_gdf["longitude"].notna()
+)
+
+print("Total event records:", len(battles_gdf))
+print("Unique Wikidata IDs:", battles_gdf["wikidata_id"].nunique())
+print("Missing names:", battles_gdf["name"].isna().sum())
+print("Missing dates:", battles_gdf["date"].isna().sum())
+print("Records with coordinates:", int(valid_coordinates.sum()))
+print("Records without coordinates:", int((~valid_coordinates).sum()))
+print("Percentage with coordinates:", round(valid_coordinates.mean() * 100, 1), "%")
+```
+
+Inspect the fields we will use for the next stage:
+
+```{python}
+display(
+    battles_gdf[
+        [
+            "wikidata_id",
+            "name",
+            "description",
+            "date",
+            "location",
+            "latitude",
+            "longitude",
+            "participants",
+            "part_of",
+            "instance_of",
+            "wikipedia_url",
+        ]
+    ].head(20)
+)
+```
+
+# 7. Check one known event
+
+The Battle of Actium (`Q160387`) is a convenient known example to check the extraction.
+
+```{python}
+actium_rows = battles_gdf.loc[
+    battles_gdf["wikidata_id"] == "Q160387",
+    [
+        "wikidata_id",
+        "name",
+        "date",
+        "latitude",
+        "longitude",
+        "instance_of",
+        "wikipedia_url",
+    ],
+]
+
+display(actium_rows)
+```
+
+# 8. Export the initial dataset
+
+This saves a CSV without the GeoPandas geometry column. The QID lists (such as `location`, `participants`, and `instance_of`) are retained as extracted values.
+
+```{python}
+output_file = "roman_battle_candidates.csv"
+
+battles_gdf.drop(columns="geometry").to_csv(
+    output_file,
+    index=False,
+    encoding="utf-8-sig",
+)
+
+print(f"Exported {len(battles_gdf)} records to {output_file}")
+```
+
+# Next stage
+
+After this initial file runs from top to bottom, the next separate stage can retrieve the entities referenced by the `location` field. Their coordinates must be stored in separate columns and treated as **linked-place coordinates**, not automatically as exact battlefield coordinates.
+
+
+# Pulling in Beligerents
+
+```{python}
+import re
+from urllib.parse import unquote
+import time
+import requests
+import pandas as pd
+import geopandas as gpd
+
+
+# Load the original candidate dataset
+candidates_df = pd.read_csv("roman_battle_candidates.csv")
+
+print("Candidate battles:", len(candidates_df))
+print("Wikipedia URLs available:", candidates_df["wikipedia_url"].notna().sum())
+
+
+# Wikipedia API endpoint
+wikipedia_api_url = "https://en.wikipedia.org/w/api.php"
+
+
+def clean_wikipedia_markup(text):
+    """Convert basic Wikipedia markup into readable text."""
+
+    if not text:
+        return None
+
+    # Remove references
+    text = re.sub(
+        r"<ref[^>]*>.*?</ref>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # Convert piped Wikipedia links: [[Article|Display text]]
+    text = re.sub(
+        r"\[\[([^|\]]+)\|([^\]]+)\]\]",
+        r"\2",
+        text
+    )
+
+    # Convert ordinary Wikipedia links: [[Article]]
+    text = re.sub(
+        r"\[\[([^\]]+)\]\]",
+        r"\1",
+        text
+    )
+
+    # Remove simple HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Remove simple formatting markup
+    text = text.replace("'''", "").replace("''", "")
+
+    # Normalize whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text if text else None
+
+
+def extract_belligerents(wikipedia_url):
+    """Retrieve combatant fields from a Wikipedia article."""
+
+    # Return empty values when no Wikipedia article is available
+    result = {
+        "combatant1": None,
+        "combatant2": None,
+        "combatant3": None,
+        "belligerents": None,
+        "wikipedia_status": None
+    }
+
+    if pd.isna(wikipedia_url) or not wikipedia_url:
+        result["wikipedia_status"] = "No Wikipedia URL"
+        return result
+
+    try:
+        # Extract the article title from its URL
+        page_title = unquote(wikipedia_url.split("/wiki/")[-1])
+
+        # Request the article's raw wikitext
+        response = requests.get(
+            wikipedia_api_url,
+            params={
+                "action": "query",
+                "prop": "revisions",
+                "titles": page_title,
+                "rvprop": "content",
+                "rvslots": "main",
+                "format": "json"
+            },
+            headers={
+                "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+            },
+            timeout=30
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Extract the article page
+        page = next(iter(data["query"]["pages"].values()))
+
+        if "revisions" not in page:
+            result["wikipedia_status"] = "No article revision"
+            return result
+
+        # Extract the main revision and content slot
+        revision = page["revisions"][0]
+        main_slot = revision["slots"]["main"]
+
+        # Handle different Wikipedia API response formats
+        wikitext = main_slot.get(
+            "content",
+            main_slot.get("*")
+        )
+
+        if wikitext is None:
+            result["wikipedia_status"] = "Content unavailable"
+            return result
+
+        # Look for belligerent and combatant fields
+        field_pattern = (
+            r"\|\s*(belligerents?|combatant[123]?)\s*=\s*"
+            r"(.*?)(?=\n\|[^|]|\n}})"
+        )
+
+        matches = re.finditer(
+            field_pattern,
+            wikitext,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        found_fields = []
+
+        for match in matches:
+            field_name = match.group(1).lower()
+            field_value = clean_wikipedia_markup(match.group(2))
+
+            if field_name == "belligerent":
+                field_name = "belligerents"
+
+            if field_name in result:
+                result[field_name] = field_value
+                found_fields.append(field_name)
+
+        if found_fields:
+            result["wikipedia_status"] = "Fields found"
+        else:
+            result["wikipedia_status"] = "No combatant fields found"
+
+        return result
+
+    except requests.RequestException as error:
+        result["wikipedia_status"] = f"Request error: {error}"
+        return result
+
+    except (KeyError, IndexError, ValueError, TypeError) as error:
+        result["wikipedia_status"] = f"Extraction error: {error}"
+        return result
+
+
+# Retrieve belligerents for every candidate
+belligerent_results = []
+
+for index, row in candidates_df.iterrows():
+
+    wikipedia_url = row["wikipedia_url"]
+
+    result = extract_belligerents(wikipedia_url)
+
+    # Keep the original Wikidata ID so results can be joined later
+    result["wikidata_id"] = row["wikidata_id"]
+
+    belligerent_results.append(result)
+
+    # Print progress
+    if (index + 1) % 10 == 0 or index == len(candidates_df) - 1:
+        print(
+            f"Processed {index + 1} of {len(candidates_df)} candidates"
+        )
+
+    # Be polite to Wikipedia's servers
+    time.sleep(1)
+
+
+# Convert the results into a DataFrame
+belligerents_df = pd.DataFrame(belligerent_results)
+
+
+# Join the extracted fields to the original candidate dataset
+candidates_with_belligerents = candidates_df.merge(
+    belligerents_df,
+    on="wikidata_id",
+    how="left"
+)
+
+
+# Export as a separate file
+output_file = "roman_battle_candidates_with_belligerents.csv"
+
+candidates_with_belligerents.to_csv(
+    output_file,
+    index=False,
+    encoding="utf-8-sig"
+)
+
+print("\nWikipedia extraction complete.")
+print("Total candidates:", len(candidates_with_belligerents))
+print(
+    "Articles with combatant fields:",
+    (candidates_with_belligerents["wikipedia_status"] == "Fields found").sum()
+)
+print(
+    "Articles without combatant fields:",
+    (candidates_with_belligerents["wikipedia_status"] == "No combatant fields found").sum()
+)
+print(
+    "Candidates without Wikipedia URLs:",
+    (candidates_with_belligerents["wikipedia_status"] == "No Wikipedia URL").sum()
+)
+print(f"\nExported results to: {output_file}")
+
+```
+

@@ -1,0 +1,198 @@
+--
+title: "Roman Warfare and the Geography of Empire"
+subtitle: "A Spatial Analysis of Battles, Settlements, Borders, and Forts"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+---
+
+# Project Overview
+
+This project investigates the spatial distribution of Roman battles and asks whether that distribution can be explained by the geography of ancient settlements, Roman territorial boundaries, and military infrastructure.
+
+The central research question is:
+
+> **How was the spatial distribution of Roman battles associated with the geography of Roman settlements, territorial boundaries, and military infrastructure?**
+
+The analysis will proceed through a sequence of increasingly historically informed spatial models. First, it will establish whether battles exhibit spatial clustering at all. Next, it will test whether the distribution of settlements can explain the observed geography of battles. Finally, it will investigate whether battles are unusually concentrated near Roman territorial borders and forts.
+
+# 1. Application Area
+
+**Roman military history and territorial expansion**
+
+The project uses spatial data to investigate the geography of Roman warfare. In particular, it examines whether the locations of battles were associated with:
+
+- The general distribution of ancient settlements.
+- The boundaries of Roman-controlled territory at different historical periods.
+- Roman military installations, especially forts.
+
+The project combines battle-location data, ancient settlement locations, historical territorial boundaries, and fort locations.
+
+# 2. Research Questions and Hypotheses
+
+## 2.1 Basic Null Model: Are Battles Spatially Random?
+
+**Research question:** Do Roman battle locations exhibit spatial clustering, or are they consistent with a random spatial distribution?
+
+- **Null hypothesis (H₀):** Battle locations follow a spatially random process within the defined study region.
+- **Alternative hypothesis (H₁):** Battle locations exhibit spatial clustering beyond what would be expected under spatial randomness.
+
+This is the baseline analysis. It establishes whether the observed battle pattern departs from a simple model of spatial randomness.
+
+The analysis will consider:
+
+- **First-order properties:** Whether battle locations are concentrated in particular geographic areas.
+- **Second-order properties:** Whether battles are closer together, or more spatially clustered, than expected under the null model.
+
+The initial null model will use a homogeneous spatial Poisson process, subject to a clearly defined study region.
+
+## 2.2 Advanced Null Model: Are Battles Distributed Around Ancient Settlements?
+
+**Research question:** Can the geographic distribution of ancient settlements explain the spatial distribution of Roman battles?
+
+- **Null hypothesis (H₀):** Battle locations follow the geographic distribution of contemporaneous ancient settlements. Battles are more likely in areas with more settlements, but there is no additional association with particular military or territorial features.
+- **Alternative hypothesis (H₁):** The observed distribution of battles cannot be adequately explained by the distribution of contemporaneous settlements alone.
+
+This model provides a more historically informed baseline than complete spatial randomness. Battles were unlikely to occur uniformly across all geographic space; they were more plausibly associated with inhabited and accessible places.
+
+The settlement-based null model will:
+
+- Use settlement locations with chronological ranges that overlap the relevant historical period.
+- Represent the geographic distribution of settlements as a spatial intensity surface.
+- Generate 999 simulated battle patterns based on that settlement-derived intensity.
+- Compare the observed battle distribution with the simulated distributions.
+
+This model will serve as the baseline for the two substantive hypotheses below.
+
+# 3. Substantive Hypotheses
+
+## 3.1 Hypothesis 1: Are Battles Concentrated Near Roman Borders?
+
+**Research question:** Are Roman battles disproportionately concentrated near the boundaries of Roman-controlled territory?
+
+- **Null hypothesis (H₀):** Given the distribution of ancient settlements, battles are no more concentrated near Roman territorial boundaries than expected.
+- **Alternative hypothesis (H₁):** Battles are more concentrated near Roman territorial boundaries than expected given the distribution of ancient settlements.
+
+The analysis will investigate whether battles occurred unusually close to the Roman frontier, accounting for the fact that battles were already more likely to occur near settlements.
+
+Potential analytical steps:
+
+1. Associate each battle with the appropriate historical boundary period.
+2. Calculate the distance from each battle location to the nearest Roman territorial boundary.
+3. Generate 999 simulated battle patterns using the settlement-based null model.
+4. Calculate the corresponding distance-to-border measurements for the simulated patterns.
+5. Compare the observed distances and spatial intensity with the simulated results.
+
+**Historical interpretation:** This analysis may help establish whether Roman warfare was disproportionately associated with contested territorial edges, rather than simply reflecting the general distribution of ancient population centers.
+
+## 3.2 Hypothesis 2: Are Battles Concentrated Near Roman Forts?
+
+**Research question:** Are Roman battles disproportionately concentrated near Roman military installations?
+
+- **Null hypothesis (H₀):** Given the distribution of ancient settlements, battles are no more concentrated near Roman forts than expected.
+- **Alternative hypothesis (H₁):** Battles are more concentrated near Roman forts than expected given the distribution of ancient settlements.
+
+Potential analytical steps:
+
+1. Identify Roman forts with usable geographic coordinates.
+2. Calculate the distance from each battle location to its nearest fort.
+3. Generate 999 simulated battle patterns using the settlement-based null model.
+4. Calculate the corresponding distance-to-fort measurements for the simulated patterns.
+5. Compare the observed distances and spatial intensity with the simulated results.
+
+**Historical interpretation:** This analysis may help establish whether military installations were associated with the locations of battles beyond what would be expected from the general distribution of ancient settlements.
+
+A possible extension is to investigate second-order spatial association between the battle and fort point patterns using an appropriate cross-type spatial statistic.
+
+# 4. Initial Evidence and Visualizations
+
+The initial exploratory analysis will use maps and descriptive spatial summaries to examine the data before formal hypothesis testing.
+
+Planned visualizations include:
+
+- The geographic distribution of all mapped battle locations.
+- The geographic distribution of ancient settlements.
+- Historical maps of Roman territorial boundaries.
+- Battle locations overlaid on the corresponding historical Roman boundaries.
+- Settlement locations overlaid on the corresponding historical Roman boundaries.
+- Battle locations and Roman forts shown together.
+- Maps showing battle distances to the nearest border and nearest fort.
+
+These visualizations will help identify broad geographic patterns, potential data gaps, and issues that need to be addressed before simulation.
+
+# 5. Formal Hypothesis Evaluation
+
+The formal analysis will follow the general simulation-based framework used in the course.
+
+## 5.1 Observed Spatial Patterns
+
+For the observed battle locations:
+
+- Compute and visualize the spatial intensity function.
+- Examine second-order spatial structure where appropriate, using a pairwise correlation function or another suitable spatial statistic.
+- Calculate distances from battles to the nearest Roman border and nearest fort for the relevant hypotheses.
+
+## 5.2 Monte Carlo Simulations
+
+Run 999 Monte Carlo simulations for each null model.
+
+**Basic null model:**
+
+- Simulate spatially random battle patterns within the defined study region.
+- Compare the observed battle pattern with the simulated patterns.
+
+**Settlement-based null model:**
+
+- Use the contemporaneous settlement distribution to define the spatial intensity of simulated battles.
+- Generate 999 simulated battle patterns from this intensity.
+- Use these simulations as the reference distribution for the border and fort hypotheses.
+
+## 5.3 Comparison and Evaluation
+
+Compare the observed spatial statistics with the distributions generated by the simulations.
+
+The analysis will assess whether the observed battle pattern is unusually clustered overall, unusually close to Roman borders, or unusually close to Roman forts.
+
+The settlement-based null model is particularly important: it helps distinguish associations with borders and forts from patterns that might arise simply because battles and military infrastructure were located near populated places.
+
+# 6. Initial Conclusions
+
+The conclusions will be based on the formal simulation results.
+
+The project will assess:
+
+- Whether Roman battles depart from complete spatial randomness.
+- Whether the distribution of ancient settlements explains much of the observed battle geography.
+- Whether battles are unusually concentrated near Roman territorial boundaries after accounting for settlement geography.
+- Whether battles are unusually concentrated near Roman forts after accounting for settlement geography.
+
+The conclusions will be framed as evidence about spatial association, not as proof of direct causation. The historical interpretation will also account for uncertainty in the dates and locations represented in the source datasets.
+
+# 7. Limitations and Future Roadmap
+
+The final section will identify limitations in the current data and outline how the analysis could be improved.
+
+Potential issues include:
+
+- **Battle data coverage:** Wikidata may not contain every historically documented battle, and the geographic precision of battle locations may vary.
+- **Settlement data coverage:** Pleiades is a gazetteer, not a complete census of ancient settlements or population.
+- **Chronological uncertainty:** Pleiades date ranges are approximate. A settlement's date range overlapping a battle period does not prove that it was occupied at the exact time of a battle.
+- **Boundary uncertainty:** Historical territorial boundaries are reconstructions. The available snapshots differ in source and methodology, and they do not represent precise, continuously changing frontiers.
+- **Fort data coverage:** The available fort locations may be incomplete or unevenly distributed across regions and periods.
+- **Study-region definition:** The spatial window and the areas where battles could plausibly occur must be defined carefully for the null simulations.
+- **Historical interpretation:** Spatial proximity does not by itself establish that a border or fort caused a battle to occur in a particular location.
+
+Future work could improve the project by collecting additional battle records, refining historical boundary reconstructions, incorporating more complete fort datasets, and adding other explanatory geographic factors such as roads, ports, terrain, and settlement size where reliable data are available.
+
+# 8. Summary of the Analytical Framework
+
+| Stage | Research question | Role in the project |
+|---|---|---|
+| 1. Basic null model | Are battles spatially random? | Establishes whether battles exhibit spatial structure |
+| 2. Advanced null model | Can settlement geography explain battle locations? | Establishes a historically informed baseline |
+| 3. Border hypothesis | Are battles unusually close to Roman borders? | Tests the relationship between warfare and territorial frontiers |
+| 4. Fort hypothesis | Are battles unusually close to Roman forts? | Tests the relationship between warfare and military infrastructure |
+| 5. Formal evaluation | Are observed patterns unusual under the null models? | Uses 999 Monte Carlo simulations and spatial statistics |
+| 6. Conclusions and roadmap | What do the results suggest, and what remains uncertain? | Interprets findings and identifies future data needs |

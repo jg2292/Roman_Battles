@@ -1,0 +1,638 @@
+---
+title: "Roman Military Conflict: Linked Location Enrichment"
+format:
+  html:
+    toc: true
+    code-fold: true
+jupyter: python3
+---
+
+# Purpose
+
+This file starts from the manually reviewed `roman_battle_candidates_reviewed.xlsx` workbook and retrieves the Wikidata records for places referenced in each Roman-involved event's `location` field (`P276`).
+
+The workflow does not rerun the original SPARQL query or retrieve the battle records again.
+
+The workflow:
+
+1. Loads the manually reviewed candidate workbook.
+2. Filters to battles marked as involving Roman forces.
+3. Preserves the manual conflict classification (`Civil Conflict` or `External`).
+4. Retrieves the linked Wikidata location entities.
+5. Builds a table of battle-to-location relationships.
+6. Exports the linked locations and battle-location relationships.
+
+The output is split into two tables:
+
+- `roman_linked_locations.csv`: one row per linked place, with its name, description, and Wikidata coordinates.
+- `roman_battle_location_links.csv`: one row per battle-place relationship, preserving the battle's Roman involvement and classification.
+
+**Important:** a linked place's coordinates represent that place, not necessarily the precise location of the battle.
+
+# 1. Load libraries and the reviewed Excel workbook
+
+```{python}
+import ast
+import time
+import requests
+import pandas as pd
+from pathlib import Path
+```
+
+```{python}
+headers = {
+    "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+}
+
+wikidata_api_url = "https://www.wikidata.org/w/api.php"
+
+# Find the reviewed Excel workbook in the current working directory
+input_file = Path.cwd() / "roman_battle_candidates_reviewed.xlsx"
+
+print("Working directory:", Path.cwd())
+print("Excel file exists:", input_file.exists())
+
+if not input_file.exists():
+    raise FileNotFoundError(
+        f"Could not find {input_file}. "
+        "Place roman_battle_candidates_reviewed.xlsx in the current working directory."
+    )
+
+# Load the manually reviewed candidate dataset
+battles_df = pd.read_excel(
+    input_file,
+    dtype={"wikidata_id": "string"}
+)
+
+print("Total candidate battles loaded:", len(battles_df))
+print("Columns:", battles_df.columns.tolist())
+```
+
+## 1.1 Standardize and apply the Roman involvement filter
+
+The workbook's manually added columns are named `Roman involved` and `Classification`. Rename them to consistent Python column names, then retain only battles marked as involving Roman forces.
+
+```{python}
+# Standardize the manually added column names
+battles_df = battles_df.rename(
+    columns={
+        "Roman involved": "roman_involved",
+        "Classification": "classification"
+    }
+)
+
+required_columns = [
+    "wikidata_id",
+    "name",
+    "date",
+    "location",
+    "roman_involved",
+    "classification"
+]
+
+missing_columns = [
+    column for column in required_columns
+    if column not in battles_df.columns
+]
+
+if missing_columns:
+    raise ValueError(
+        f"The reviewed workbook is missing required columns: {missing_columns}"
+    )
+
+
+# Convert Roman involvement values into a consistent format
+roman_flags = (
+    battles_df["roman_involved"]
+    .astype("string")
+    .str.strip()
+    .str.lower()
+)
+
+# Check for unexpected values before filtering
+valid_flags = ["true", "false", "1", "0", "yes", "no"]
+
+unexpected_flags = sorted(
+    roman_flags.dropna().loc[
+        ~roman_flags.dropna().isin(valid_flags)
+    ].unique().tolist()
+)
+
+if unexpected_flags:
+    raise ValueError(
+        f"Unexpected values in Roman involved column: {unexpected_flags}"
+    )
+
+if roman_flags.isna().any():
+    raise ValueError(
+        "Some battles have a missing Roman involved value. "
+        "Review those rows before continuing."
+    )
+
+
+# Keep only battles involving Roman forces
+roman_mask = roman_flags.isin(["true", "1", "yes"])
+
+original_candidate_count = len(battles_df)
+non_roman_count = int((~roman_mask).sum())
+
+battles_df = battles_df.loc[roman_mask].copy()
+
+# Store Roman involvement as a Boolean
+battles_df["roman_involved"] = True
+
+# Clean the classification values
+battles_df["classification"] = (
+    battles_df["classification"]
+    .astype("string")
+    .str.strip()
+)
+
+print("\nRoman battle filtering complete.")
+print("Original candidate battles:", original_candidate_count)
+print("Non-Roman battles excluded:", non_roman_count)
+print("Roman-involved battles retained:", len(battles_df))
+
+print("\nClassification counts:")
+print(battles_df["classification"].value_counts(dropna=False))
+
+print(
+    "\nRemaining records with missing classifications:",
+    battles_df["classification"].isna().sum()
+)
+
+print(
+    "\nUnique Roman battle IDs:",
+    battles_df["wikidata_id"].nunique()
+)
+```
+
+Inspect the retained battles:
+
+```{python}
+display(
+    battles_df[
+        [
+            "wikidata_id",
+            "name",
+            "date",
+            "roman_involved",
+            "classification",
+            "location"
+        ]
+    ].head(20)
+)
+```
+
+# 2. Parse the linked location IDs
+
+The original workbook stores `location` as a string representation of a Python list, such as `['Q202337', 'Q...']`. This helper converts that text back into a list. Empty or missing values become an empty list.
+
+```{python}
+def parse_qid_list(value):
+    """Convert a cell containing a list of QIDs into a Python list."""
+
+    if pd.isna(value) or not str(value).strip():
+        return []
+
+    try:
+        parsed = ast.literal_eval(str(value))
+
+    except (ValueError, SyntaxError):
+        # Also support a single QID stored without list brackets.
+        text = str(value).strip()
+        return [text] if text.startswith("Q") else []
+
+    if isinstance(parsed, str):
+        return [parsed] if parsed.startswith("Q") else []
+
+    if isinstance(parsed, list):
+        return [
+            item for item in parsed
+            if isinstance(item, str) and item.startswith("Q")
+        ]
+
+    return []
+
+
+battles_df["location_ids"] = battles_df["location"].apply(parse_qid_list)
+
+
+location_ids = sorted({
+    qid
+    for qids in battles_df["location_ids"]
+    for qid in qids
+})
+
+print("Unique linked location IDs:", len(location_ids))
+print(
+    "Roman battle records with at least one linked location:",
+    int(battles_df["location_ids"].apply(bool).sum())
+)
+```
+
+Inspect a few records before making API requests:
+
+```{python}
+display(
+    battles_df.loc[
+        battles_df["location_ids"].apply(bool),
+        [
+            "wikidata_id",
+            "name",
+            "date",
+            "classification",
+            "location",
+            "location_ids"
+        ]
+    ].head(10)
+)
+```
+
+# 3. Retrieve location entities in batches
+
+This function requests 50 locations at a time. It waits longer when Wikidata reports that its servers are lagging, and it keeps successful batches in `location_cache`. If a batch fails after the retries, the function stops rather than repeatedly sending requests.
+
+```{python}
+location_cache = {}
+
+
+def fetch_location_entities(qids, batch_size=50, max_attempts=5):
+    """Retrieve linked Wikidata entities in batches and retain successful results."""
+
+    for start in range(0, len(qids), batch_size):
+
+        batch = [
+            qid for qid in qids[start:start + batch_size]
+            if qid not in location_cache
+        ]
+
+        if not batch:
+            continue
+
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "format": "json",
+            "props": "labels|descriptions|claims|sitelinks",
+            "languages": "en",
+            "maxlag": 5,
+        }
+
+        batch_succeeded = False
+
+        for attempt in range(max_attempts):
+
+            try:
+                response = requests.get(
+                    wikidata_api_url,
+                    params=params,
+                    headers=headers,
+                    timeout=60,
+                )
+
+                if response.status_code == 429 or response.status_code >= 500:
+
+                    retry_after = response.headers.get("Retry-After")
+
+                    wait_seconds = (
+                        int(retry_after)
+                        if retry_after and retry_after.isdigit()
+                        else 60 * (attempt + 1)
+                    )
+
+                    print(
+                        f"Temporary HTTP {response.status_code}; "
+                        f"waiting {wait_seconds} seconds."
+                    )
+
+                    time.sleep(wait_seconds)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                if "error" in data:
+
+                    error = data["error"]
+                    print("Wikidata API error:", error)
+
+                    if error.get("code") == "maxlag":
+
+                        lag_seconds = int(float(error.get("lag", 0)))
+                        wait_seconds = max(
+                            60 * (attempt + 1),
+                            lag_seconds + 30
+                        )
+
+                        print(
+                            f"Wikidata is lagging; "
+                            f"waiting {wait_seconds} seconds."
+                        )
+
+                        time.sleep(wait_seconds)
+                        continue
+
+                    break
+
+                entities = data.get("entities")
+
+                if entities is None:
+                    print("Unexpected response; stopping this batch.")
+                    break
+
+                location_cache.update(entities)
+                batch_succeeded = True
+                break
+
+            except (requests.RequestException, ValueError) as error:
+
+                print("Request failed:", error)
+
+                if attempt < max_attempts - 1:
+                    wait_seconds = 30 * (attempt + 1)
+                    print(f"Waiting {wait_seconds} seconds before retrying.")
+                    time.sleep(wait_seconds)
+
+        if not batch_succeeded:
+            print(f"Could not retrieve the batch starting at location {start}.")
+            print(
+                "Stopping. Successfully retrieved locations "
+                "remain in location_cache."
+            )
+            break
+
+        print(
+            f"Retrieved {len(location_cache)} of "
+            f"{len(qids)} location entities"
+        )
+
+        time.sleep(3)
+
+    return location_cache
+```
+
+Run the retrieval step:
+
+```{python}
+location_cache = fetch_location_entities(location_ids)
+
+missing_location_ids = [
+    qid for qid in location_ids
+    if qid not in location_cache
+]
+
+print("Location entities retrieved:", len(location_cache))
+print("Location IDs still missing:", len(missing_location_ids))
+
+if missing_location_ids:
+    print("First missing IDs:", missing_location_ids[:20])
+```
+
+If some IDs remain missing because Wikidata is lagging, wait for the service to recover and rerun this cell. While the kernel remains running, already cached IDs are skipped. If you restart the kernel, the in-memory cache is lost and the retrieval starts over.
+
+# 4. Extract place names and coordinates
+
+```{python}
+def get_entity_claims(entity, property_id):
+    """Return all claims for a Wikidata property."""
+    return entity.get("claims", {}).get(property_id, [])
+
+
+def extract_place_coordinates(entity):
+    """Return the first available latitude/longitude pair, if present."""
+
+    for claim in get_entity_claims(entity, "P625"):
+
+        mainsnak = claim.get("mainsnak", {})
+        datavalue = mainsnak.get("datavalue")
+
+        if not datavalue:
+            continue
+
+        value = datavalue.get("value", {})
+        latitude = value.get("latitude")
+        longitude = value.get("longitude")
+
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+
+    return None, None
+
+
+def extract_place(qid, entity):
+    """Build one row of location information from a Wikidata entity."""
+
+    latitude, longitude = extract_place_coordinates(entity)
+
+    sitelink = entity.get("sitelinks", {}).get("enwiki", {})
+    wikipedia_title = sitelink.get("title")
+
+    wikipedia_url = None
+
+    if wikipedia_title:
+        from urllib.parse import quote
+
+        wikipedia_url = (
+            "https://en.wikipedia.org/wiki/"
+            + quote(wikipedia_title.replace(" ", "_"))
+        )
+
+    return {
+        "location_wikidata_id": qid,
+        "location_name": entity.get("labels", {}).get("en", {}).get("value"),
+        "location_description": entity.get("descriptions", {}).get("en", {}).get("value"),
+        "location_latitude": latitude,
+        "location_longitude": longitude,
+        "location_wikipedia_url": wikipedia_url,
+    }
+
+
+location_records = []
+
+for qid in location_ids:
+
+    entity = location_cache.get(qid)
+
+    if not entity or "missing" in entity:
+        continue
+
+    location_records.append(extract_place(qid, entity))
+
+
+locations_df = pd.DataFrame(
+    location_records,
+    columns=[
+        "location_wikidata_id",
+        "location_name",
+        "location_description",
+        "location_latitude",
+        "location_longitude",
+        "location_wikipedia_url"
+    ]
+)
+
+print("Location records extracted:", len(locations_df))
+
+if not locations_df.empty:
+
+    has_coordinates = (
+        locations_df["location_latitude"].notna()
+        & locations_df["location_longitude"].notna()
+    )
+
+    print("Locations with coordinates:", int(has_coordinates.sum()))
+    print("Locations without coordinates:", int((~has_coordinates).sum()))
+
+display(locations_df.head(10))
+```
+
+# 5. Build a battle-to-location link table
+
+A battle can reference more than one location. This table therefore uses one row per battle-location relationship, instead of forcing multiple places into a single set of coordinate columns.
+
+The manual Roman involvement and classification fields are carried into every relationship. This means that a battle with multiple linked locations will have multiple rows, but each row will retain the same classification.
+
+```{python}
+link_records = []
+
+for _, battle in battles_df.iterrows():
+
+    for location_qid in battle["location_ids"]:
+
+        link_records.append({
+            "battle_wikidata_id": battle["wikidata_id"],
+            "battle_name": battle.get("name"),
+            "battle_date": battle.get("date"),
+            "roman_involved": battle.get("roman_involved"),
+            "classification": battle.get("classification"),
+            "location_wikidata_id": location_qid,
+        })
+
+
+battle_location_links_df = pd.DataFrame(
+    link_records,
+    columns=[
+        "battle_wikidata_id",
+        "battle_name",
+        "battle_date",
+        "roman_involved",
+        "classification",
+        "location_wikidata_id"
+    ]
+)
+
+
+# Attach the retrieved location names and coordinates
+if not locations_df.empty:
+
+    battle_location_links_df = battle_location_links_df.merge(
+        locations_df,
+        on="location_wikidata_id",
+        how="left"
+    )
+
+
+print("Battle-location links:", len(battle_location_links_df))
+
+print(
+    "Unique Roman battles with linked locations:",
+    battle_location_links_df["battle_wikidata_id"].nunique()
+)
+
+print("\nBattles by classification:")
+
+if not battle_location_links_df.empty:
+
+    print(
+        battle_location_links_df[
+            ["battle_wikidata_id", "classification"]
+        ]
+        .drop_duplicates()["classification"]
+        .value_counts(dropna=False)
+    )
+
+display(battle_location_links_df.head(10))
+```
+
+# 6. Export the two output files
+
+The output filenames remain the same as in the earlier workflow. They now contain only Roman-involved battles, and the battle-location relationship file includes the manual classification.
+
+```{python}
+locations_output_file = "roman_linked_locations.csv"
+links_output_file = "roman_battle_location_links.csv"
+
+
+locations_df.to_csv(
+    locations_output_file,
+    index=False,
+    encoding="utf-8-sig"
+)
+
+battle_location_links_df.to_csv(
+    links_output_file,
+    index=False,
+    encoding="utf-8-sig"
+)
+
+
+print(f"Exported {len(locations_df)} places to {locations_output_file}")
+
+print(
+    f"Exported {len(battle_location_links_df)} Roman battle-location links "
+    f"to {links_output_file}"
+)
+```
+
+# 7. Check a known example
+
+The Battle of Actium (`Q160387`) is a convenient known example to check the extraction. The linked-location table should be reviewed as data, not treated as an exact battlefield map.
+
+```{python}
+actium_links = battle_location_links_df.loc[
+    battle_location_links_df["battle_wikidata_id"] == "Q160387"
+]
+
+display(actium_links)
+```
+
+# 8. Final checks
+
+These checks summarize the final Roman-only dataset and verify that no non-Roman battles remain.
+
+```{python}
+print("Final dataset checks")
+print("--------------------")
+
+print("Candidate battles before filtering:", original_candidate_count)
+print("Non-Roman battles excluded:", non_roman_count)
+print("Roman battles retained:", len(battles_df))
+print("Unique Roman battle IDs:", battles_df["wikidata_id"].nunique())
+
+print(
+    "Unique battles represented in location links:",
+    battle_location_links_df["battle_wikidata_id"].nunique()
+)
+
+print(
+    "Unique linked locations:",
+    battle_location_links_df["location_wikidata_id"].nunique()
+)
+
+print(
+    "Battle-location records with coordinates:",
+    int(
+        (
+            battle_location_links_df["location_latitude"].notna()
+            & battle_location_links_df["location_longitude"].notna()
+        ).sum()
+    ) if not battle_location_links_df.empty else 0
+)
+
+print("\nClassification counts among retained battles:")
+print(battles_df["classification"].value_counts(dropna=False))
+
+assert battles_df["roman_involved"].all()
+assert battles_df["wikidata_id"].is_unique
+```

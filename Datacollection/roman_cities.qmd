@@ -1,0 +1,421 @@
+
+---
+title: "Roman Cities and Settlements"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+jupyter: python3
+---
+
+# Introduction
+
+This notebook collects historical place data from the Pleiades Places layer in the Roman Empire Cultural Shapefiles ArcGIS Feature Service.
+
+The goal is to create a geographic dataset of ancient settlements that can later be compared with Roman territorial boundaries and battle locations.
+
+For this project, a record is included in the settlement dataset when:
+
+- Its `FEATURETYP` attribute contains the term `settlement`.
+- It has a valid, non-empty Point geometry with finite coordinates.
+
+Both precise and rough locations are retained. The original `LOCATIONPR` field is preserved so positional accuracy can be considered in later analysis.
+
+# 1. Setup
+
+Import the required libraries.
+
+```{python}
+import requests
+import geopandas as gpd
+import pandas as pd
+import numpy as np
+import json
+
+from pathlib import Path
+```
+
+Set the working directory and create an output folder.
+
+```{python}
+# Use the directory from which this QMD is being rendered
+project_dir = Path.cwd()
+
+# Create output folder
+output_dir = project_dir / "roman_cities"
+output_dir.mkdir(exist_ok=True)
+
+print("Working directory:", project_dir)
+print("Output directory:", output_dir)
+```
+
+# 2. Connect to the ArcGIS Feature Service
+
+We will use the existing Roman Empire Cultural Shapefiles Feature Service. The Pleiades Places layer is layer 6.
+
+```{python}
+# ArcGIS Feature Service
+base_url = (
+    "https://services1.arcgis.com/GWbDzXVIBphv2Dgx/"
+    "ArcGIS/rest/services/Roman_Empire_Cultural_Shapefiles/"
+    "FeatureServer"
+)
+
+# Pleiades Places layer
+layer_id = 6
+
+# Layer query endpoint
+url = f"{base_url}/{layer_id}/query"
+```
+
+# 3. Inspect the Layer
+
+Retrieve the layer metadata to examine its geometry type and available attributes.
+
+```{python}
+response = requests.get(
+    f"{base_url}/{layer_id}",
+    params={"f": "json"},
+    timeout=60
+)
+
+response.raise_for_status()
+layer_info = response.json()
+
+print("Layer:", layer_info.get("name"))
+print("Geometry:", layer_info.get("geometryType"))
+print("Description:", layer_info.get("description"))
+
+print("\nAvailable fields:")
+for field in layer_info.get("fields", []):
+    print(field["name"], "-", field.get("alias"))
+```
+
+# 4. Download Pleiades Places
+
+Retrieve all available records using pagination so the download does not depend on a single request being able to return the entire layer.
+
+```{python}
+# Store downloaded features
+all_features = []
+
+# Number of records to request per batch
+batch_size = 1000
+
+# Starting record
+offset = 0
+
+while True:
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "resultOffset": offset,
+        "resultRecordCount": batch_size,
+        "f": "geojson"
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=120
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    # Check that the response contains features
+    features = data.get("features", [])
+
+    if not features:
+        break
+
+    # Add this batch to the complete collection
+    all_features.extend(features)
+
+    print(
+        f"Downloaded {len(features)} records "
+        f"(total: {len(all_features)})"
+    )
+
+    # Move to the next batch
+    offset += len(features)
+
+    # Stop when the final batch is smaller than requested
+    if len(features) < batch_size:
+        break
+
+print("\nTotal records downloaded:", len(all_features))
+```
+
+# 5. Save the Original GeoJSON
+
+Preserve the complete Pleiades download before applying any filters.
+
+```{python}
+# Combine the downloaded features into a GeoJSON FeatureCollection
+places_geojson = {
+    "type": "FeatureCollection",
+    "features": all_features
+}
+
+# Output file
+geojson_file = output_dir / "pleiades_places.geojson"
+
+# Save GeoJSON
+with open(geojson_file, "w", encoding="utf-8") as file:
+    json.dump(places_geojson, file)
+
+print("Saved:", geojson_file)
+```
+
+# 6. Load into GeoPandas
+
+Read the downloaded GeoJSON into a GeoDataFrame.
+
+```{python}
+places_gdf = gpd.read_file(geojson_file)
+
+print("Number of records:", len(places_gdf))
+print("Coordinate system:", places_gdf.crs)
+
+print("\nGeometry types:")
+print(places_gdf.geometry.geom_type.value_counts(dropna=False))
+```
+
+# 7. Explore the Attributes
+
+Inspect the available columns and a sample of records.
+
+```{python}
+print(places_gdf.columns.tolist())
+```
+
+```{python}
+places_gdf.head(10)
+```
+
+# 8. Examine Feature Classifications
+
+The `FEATURETYP` field describes the type of ancient place or feature. Some records contain multiple classifications, so we will search for the term `settlement` rather than requiring an exact match.
+
+```{python}
+# Count records by feature type
+featuretype_counts = (
+    places_gdf["FEATURETYP"]
+    .fillna("Missing")
+    .value_counts()
+    .rename_axis("Feature Type")
+    .reset_index(name="Count")
+)
+
+featuretype_counts["Percentage"] = (
+    featuretype_counts["Count"] / len(places_gdf) * 100
+).round(2)
+
+featuretype_counts
+```
+
+Identify records whose feature type contains `settlement`.
+
+```{python}
+# Identify records with settlement in their feature type
+settlement_mask = (
+    places_gdf["FEATURETYP"]
+    .fillna("")
+    .str.contains("settlement", case=False, regex=False)
+)
+
+print("Records containing settlement:", settlement_mask.sum())
+
+print("\nFeature type breakdown:")
+print(
+    places_gdf.loc[settlement_mask, "FEATURETYP"]
+    .value_counts()
+)
+```
+
+# 9. Examine Settlement Location Precision
+
+The `LOCATIONPR` field describes the precision of the location information. We will examine it among records classified as settlements.
+
+```{python}
+# Count settlement records by location precision
+settlement_precision = (
+    places_gdf.loc[settlement_mask, "LOCATIONPR"]
+    .fillna("Missing")
+    .value_counts()
+    .to_frame("Count")
+)
+
+settlement_precision["Percentage"] = (
+    settlement_precision["Count"] /
+    settlement_mask.sum() * 100
+).round(2)
+
+settlement_precision
+```
+
+We retain both precise and rough locations. The precision classification remains available for later analysis. Records classified as unlocated are not automatically removed here; inclusion in the final dataset depends on whether a valid point geometry is actually present.
+
+# 10. Create the Geographic Settlement Dataset
+
+The final dataset must meet both requirements:
+
+1. `FEATURETYP` contains `settlement`.
+2. The geometry is a valid, non-empty Point with finite coordinates.
+
+First, identify records with valid Point geometries.
+
+```{python}
+# Identify non-null, non-empty, valid Point geometries
+point_geometry_mask = (
+    places_gdf.geometry.notna()
+    & places_gdf.geometry.geom_type.eq("Point")
+    & places_gdf.geometry.is_valid
+    & ~places_gdf.geometry.is_empty
+)
+
+# Check coordinate values only for Point geometries
+point_records = places_gdf.loc[point_geometry_mask]
+finite_coordinates = (
+    np.isfinite(point_records.geometry.x)
+    & np.isfinite(point_records.geometry.y)
+)
+
+# Create a mask aligned to the original GeoDataFrame
+finite_coordinates_mask = pd.Series(
+    False,
+    index=places_gdf.index
+)
+finite_coordinates_mask.loc[point_records.index] = finite_coordinates
+
+# Combine the geometry requirements
+valid_point_mask = point_geometry_mask & finite_coordinates_mask
+
+print("Records with valid point geometry:", valid_point_mask.sum())
+```
+
+Now combine the settlement classification and geometry requirements.
+
+```{python}
+# Records must satisfy both requirements
+settlement_dataset_mask = settlement_mask & valid_point_mask
+
+# Create the final settlement GeoDataFrame
+settlements_gdf = places_gdf.loc[settlement_dataset_mask].copy()
+
+print("Original Pleiades records:", len(places_gdf))
+print("Records classified as settlements:", settlement_mask.sum())
+print("Records with valid point geometry:", valid_point_mask.sum())
+print("Final settlement records:", len(settlements_gdf))
+```
+
+Examine the location precision and geometry types in the final dataset.
+
+```{python}
+print("Location precision in final settlement dataset:")
+print(
+    settlements_gdf["LOCATIONPR"]
+    .fillna("Missing")
+    .value_counts(dropna=False)
+)
+
+print("\nCoordinate system:", settlements_gdf.crs)
+
+print("\nGeometry types:")
+print(settlements_gdf.geometry.geom_type.value_counts(dropna=False))
+```
+
+Preview the final dataset.
+
+```{python}
+settlements_gdf[
+    [
+        "ID",
+        "LOCATIONPR",
+        "DESCRIPTIO",
+        "FEATURETYP",
+        "POINT_X",
+        "POINT_Y",
+        "geometry"
+    ]
+].head(20)
+```
+
+# 11. Save the Settlement Dataset
+
+Save the filtered geographic data separately from the original Pleiades download. The GeoJSON preserves the point geometries, while the CSV contains the attributes.
+
+```{python}
+# Save settlement GeoJSON
+settlement_geojson = output_dir / "pleiades_settlements.geojson"
+
+settlements_gdf.to_file(
+    settlement_geojson,
+    driver="GeoJSON"
+)
+
+# Save settlement attributes as CSV
+settlements_df = pd.DataFrame(
+    settlements_gdf.drop(columns="geometry")
+)
+
+settlement_csv = output_dir / "pleiades_settlements.csv"
+settlements_df.to_csv(
+    settlement_csv,
+    index=False
+)
+
+print("Saved settlement datasets:")
+print(settlement_geojson)
+print(settlement_csv)
+```
+
+# 12. Final Summary
+
+Summarize the original Pleiades collection and the filtered settlement dataset.
+
+```{python}
+print("PLEIADES PLACES COLLECTION")
+print("--------------------------")
+print("Original records:", len(places_gdf))
+
+print("\nOriginal feature type counts:")
+print(places_gdf["FEATURETYP"].value_counts().head(15))
+
+print("\nOriginal location precision:")
+print(places_gdf["LOCATIONPR"].value_counts(dropna=False))
+
+print("\nSETTLEMENT DATASET")
+print("-----------------")
+print("Records containing settlement:", settlement_mask.sum())
+print("Records with valid point geometry:", valid_point_mask.sum())
+print("Final settlement records:", len(settlements_gdf))
+
+print("\nSettlement location precision:")
+print(settlements_gdf["LOCATIONPR"].value_counts(dropna=False))
+
+print("\nOUTPUT FILES")
+print("------------")
+print("Original GeoJSON:", geojson_file)
+print("Settlement GeoJSON:", settlement_geojson)
+print("Settlement CSV:", settlement_csv)
+```
+
+
+Final Count
+
+```{python}
+print("Final settlement count:", len(settlements_gdf))
+
+print("\nLocation precision:")
+print(
+    settlements_gdf["LOCATIONPR"]
+    .fillna("Missing")
+    .value_counts(dropna=False)
+)
+
+```

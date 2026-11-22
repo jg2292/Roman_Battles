@@ -1,0 +1,439 @@
+---
+title: "Roman Military Conflict: Linked Location Enrichment"
+format:
+  html:
+    toc: true
+    code-fold: true
+
+---
+
+# OLD DO NOT USE
+
+# Purpose
+
+This file starts from the existing `roman_battle_candidates.csv` file and retrieves the Wikidata records for places referenced in each event's `location` field (`P276`). It does not rerun the original SPARQL query or retrieve the battle records again.
+
+The output is split into two tables:
+
+- `roman_linked_locations.csv`: one row per linked place, with its name, description, and Wikidata coordinates.
+- `roman_battle_location_links.csv`: one row per battle-place relationship, preserving which location belongs to which battle.
+
+**Important:** a linked place's coordinates represent that place, not necessarily the precise location of the battle.
+
+# 1. Load libraries and the existing CSV
+
+```{python}
+import ast
+import time
+import requests
+import pandas as pd
+from pathlib import Path
+```
+
+```{python}
+headers = {
+    "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+}
+
+wikidata_api_url = "https://www.wikidata.org/w/api.php"
+# Find the CSV in the current working directory
+input_file = Path.cwd() / "roman_battle_candidates.csv"
+
+print("Working directory:", Path.cwd())
+print("CSV exists:", input_file.exists())
+
+battles_df = pd.read_csv(
+    input_file,
+    dtype={"wikidata_id": "string"}
+)
+
+print("Battle records loaded:", len(battles_df))
+print("Columns:", battles_df.columns.tolist())
+
+```
+
+# 2. Parse the linked location IDs
+
+The original CSV stores `location` as a string representation of a Python list, such as `['Q202337', 'Q...']`. This helper safely converts that text back into a list. Empty or missing values become an empty list.
+
+```{python}
+def parse_qid_list(value):
+    """Convert a CSV cell containing a list of QIDs into a Python list."""
+    if pd.isna(value) or not str(value).strip():
+        return []
+
+    try:
+        parsed = ast.literal_eval(str(value))
+    except (ValueError, SyntaxError):
+        # Also support a single QID stored without list brackets.
+        text = str(value).strip()
+        return [text] if text.startswith("Q") else []
+
+    if isinstance(parsed, str):
+        return [parsed] if parsed.startswith("Q") else []
+
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, str) and item.startswith("Q")]
+
+    return []
+
+
+battles_df["location_ids"] = battles_df["location"].apply(parse_qid_list)
+
+location_ids = sorted({
+    qid
+    for qids in battles_df["location_ids"]
+    for qid in qids
+})
+
+print("Unique linked location IDs:", len(location_ids))
+print("Battle records with at least one linked location:", int(battles_df["location_ids"].apply(bool).sum()))
+```
+
+Inspect a few records before making API requests:
+
+```{python}
+display(
+    battles_df.loc[battles_df["location_ids"].apply(bool), ["wikidata_id", "name", "location", "location_ids"]].head(10)
+)
+```
+
+# 3. Retrieve location entities in batches
+
+This function requests 50 locations at a time. It waits longer when Wikidata reports that its servers are lagging, and it keeps successful batches in `location_cache`. If a batch fails after the retries, the function stops rather than repeatedly sending requests.
+
+```{python}
+location_cache = {}
+
+
+def fetch_location_entities(qids, batch_size=50, max_attempts=5):
+    """Retrieve linked Wikidata entities in batches and retain successful results."""
+    for start in range(0, len(qids), batch_size):
+        batch = [qid for qid in qids[start:start + batch_size] if qid not in location_cache]
+
+        if not batch:
+            continue
+
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "format": "json",
+            "props": "labels|descriptions|claims|sitelinks",
+            "languages": "en",
+            "maxlag": 5,
+        }
+
+        batch_succeeded = False
+
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(
+                    wikidata_api_url,
+                    params=params,
+                    headers=headers,
+                    timeout=60,
+                )
+
+                if response.status_code == 429 or response.status_code >= 500:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_seconds = (
+                        int(retry_after)
+                        if retry_after and retry_after.isdigit()
+                        else 60 * (attempt + 1)
+                    )
+                    print(f"Temporary HTTP {response.status_code}; waiting {wait_seconds} seconds.")
+                    time.sleep(wait_seconds)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                if "error" in data:
+                    error = data["error"]
+                    print("Wikidata API error:", error)
+
+                    if error.get("code") == "maxlag":
+                        lag_seconds = int(float(error.get("lag", 0)))
+                        wait_seconds = max(60 * (attempt + 1), lag_seconds + 30)
+                        print(f"Wikidata is lagging; waiting {wait_seconds} seconds.")
+                        time.sleep(wait_seconds)
+                        continue
+
+                    break
+
+                entities = data.get("entities")
+                if entities is None:
+                    print("Unexpected response; stopping this batch.")
+                    break
+
+                location_cache.update(entities)
+                batch_succeeded = True
+                break
+
+            except (requests.RequestException, ValueError) as error:
+                print("Request failed:", error)
+                if attempt < max_attempts - 1:
+                    wait_seconds = 30 * (attempt + 1)
+                    print(f"Waiting {wait_seconds} seconds before retrying.")
+                    time.sleep(wait_seconds)
+
+        if not batch_succeeded:
+            print(f"Could not retrieve the batch starting at location {start}.")
+            print("Stopping. Successfully retrieved locations remain in location_cache.")
+            break
+
+        print(f"Retrieved {len(location_cache)} of {len(qids)} location entities")
+        time.sleep(3)
+
+    return location_cache
+```
+
+Run the retrieval step:
+
+```{python}
+location_cache = fetch_location_entities(location_ids)
+
+missing_location_ids = [qid for qid in location_ids if qid not in location_cache]
+
+print("Location entities retrieved:", len(location_cache))
+print("Location IDs still missing:", len(missing_location_ids))
+
+if missing_location_ids:
+    print("First missing IDs:", missing_location_ids[:20])
+```
+
+If some IDs remain missing because Wikidata is lagging, wait for the service to recover and rerun this cell. While the kernel remains running, already cached IDs are skipped. If you restart the kernel, the in-memory cache is lost and the retrieval starts over.
+
+# 4. Extract place names and coordinates
+
+```{python}
+def get_entity_claims(entity, property_id):
+    return entity.get("claims", {}).get(property_id, [])
+
+
+def extract_place_coordinates(entity):
+    """Return the first available latitude/longitude pair, if present."""
+    for claim in get_entity_claims(entity, "P625"):
+        mainsnak = claim.get("mainsnak", {})
+        datavalue = mainsnak.get("datavalue")
+
+        if not datavalue:
+            continue
+
+        value = datavalue.get("value", {})
+        latitude = value.get("latitude")
+        longitude = value.get("longitude")
+
+        if latitude is not None and longitude is not None:
+            return latitude, longitude
+
+    return None, None
+
+
+def extract_place(qid, entity):
+    latitude, longitude = extract_place_coordinates(entity)
+    sitelink = entity.get("sitelinks", {}).get("enwiki", {})
+    wikipedia_title = sitelink.get("title")
+
+    wikipedia_url = None
+    if wikipedia_title:
+        from urllib.parse import quote
+        wikipedia_url = "https://en.wikipedia.org/wiki/" + quote(wikipedia_title.replace(" ", "_"))
+
+    return {
+        "location_wikidata_id": qid,
+        "location_name": entity.get("labels", {}).get("en", {}).get("value"),
+        "location_description": entity.get("descriptions", {}).get("en", {}).get("value"),
+        "location_latitude": latitude,
+        "location_longitude": longitude,
+        "location_wikipedia_url": wikipedia_url,
+    }
+
+
+location_records = []
+
+for qid in location_ids:
+    entity = location_cache.get(qid)
+
+    if not entity or "missing" in entity:
+        continue
+
+    location_records.append(extract_place(qid, entity))
+
+locations_df = pd.DataFrame(location_records)
+
+print("Location records extracted:", len(locations_df))
+print("Locations with coordinates:", int((locations_df["location_latitude"].notna() & locations_df["location_longitude"].notna()).sum()))
+print("Locations without coordinates:", int((locations_df["location_latitude"].isna() | locations_df["location_longitude"].isna()).sum()))
+
+display(locations_df.head(10))
+```
+
+# 5. Build a battle-to-location link table
+
+A battle can reference more than one location. This table therefore uses one row per battle-location relationship, instead of forcing multiple places into a single set of coordinate columns.
+
+```{python}
+link_records = []
+
+for _, battle in battles_df.iterrows():
+    for location_qid in battle["location_ids"]:
+        link_records.append({
+            "battle_wikidata_id": battle["wikidata_id"],
+            "battle_name": battle.get("name"),
+            "battle_date": battle.get("date"),
+            "location_wikidata_id": location_qid,
+        })
+
+battle_location_links_df = pd.DataFrame(
+    link_records,
+    columns=["battle_wikidata_id", "battle_name", "battle_date", "location_wikidata_id"],
+)
+
+if not locations_df.empty:
+    battle_location_links_df = battle_location_links_df.merge(
+        locations_df,
+        on="location_wikidata_id",
+        how="left",
+    )
+
+print("Battle-location links:", len(battle_location_links_df))
+print("Unique battles with linked locations:", battle_location_links_df["battle_wikidata_id"].nunique())
+display(battle_location_links_df.head(10))
+```
+
+# 6. Export the two output files
+
+```{python}
+locations_output_file = "roman_linked_locations.csv"
+links_output_file = "roman_battle_location_links.csv"
+
+locations_df.to_csv(locations_output_file, index=False, encoding="utf-8-sig")
+battle_location_links_df.to_csv(links_output_file, index=False, encoding="utf-8-sig")
+
+print(f"Exported {len(locations_df)} places to {locations_output_file}")
+print(f"Exported {len(battle_location_links_df)} battle-location links to {links_output_file}")
+```
+
+# 7. Check a known example
+
+The linked-location table should be reviewed as data, not treated as an exact battlefield map. For any later spatial analysis, keep the battle's own coordinates and the linked place's coordinates in separate fields.
+
+```{python}
+actium_links = battle_location_links_df.loc[
+    battle_location_links_df["battle_wikidata_id"] == "Q160387"
+]
+
+display(actium_links)
+```
+
+## Belligerents
+```{python}
+import requests
+import re
+
+# Wikipedia article URL
+wiki_url = "https://en.wikipedia.org/wiki/Battle_of_Forum_Gallorum"
+
+# Extract the article title from the URL
+page_title = wiki_url.split("/wiki/")[-1]
+
+# Wikipedia API endpoint
+api_url = "https://en.wikipedia.org/w/api.php"
+
+# Request the article's raw wikitext
+response = requests.get(
+    api_url,
+    params={
+        "action": "query",
+        "prop": "revisions",
+        "titles": page_title,
+        "rvprop": "content",
+        "rvslots": "main",
+        "format": "json"
+    },
+    headers={
+        "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+    },
+    timeout=30
+)
+
+response.raise_for_status()
+
+data = response.json()
+
+# Extract the article page
+page = next(iter(data["query"]["pages"].values()))
+
+# Check that a revision was returned
+if "revisions" not in page:
+    print("No article revision was found.")
+
+else:
+    # Extract the main revision
+    revision = page["revisions"][0]
+
+    # Extract the main content slot
+    main_slot = revision["slots"]["main"]
+
+    # Handle different Wikipedia API response formats
+    wikitext = main_slot.get(
+        "content",
+        main_slot.get("*")
+    )
+
+    if wikitext is None:
+        print("Could not retrieve article content.")
+        print("Available slot fields:", main_slot.keys())
+
+    else:
+        print("Successfully retrieved article wikitext.")
+
+        # Search for possible belligerent fields
+        field_pattern = (
+            r"\|\s*(belligerents?|combatant[123]?)\s*=\s*"
+            r"(.*?)(?=\n\|[^|]|\n}})"
+        )
+
+        matches = re.finditer(
+            field_pattern,
+            wikitext,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        # Extract and display the fields
+        found_fields = False
+
+        for match in matches:
+            found_fields = True
+
+            field_name = match.group(1).strip()
+            field_value = match.group(2).strip()
+
+            print(f"\n{field_name}:")
+            print(field_value)
+
+        if not found_fields:
+            print("\nNo belligerent or combatant fields found.")
+
+            # Diagnostic: search for any mention of these terms
+            print("\nChecking for other occurrences of 'combatant' or 'belligerent'...")
+
+            diagnostic_matches = list(
+                re.finditer(
+                    r"combatant|belligerent",
+                    wikitext,
+                    flags=re.IGNORECASE
+                )
+            )
+
+            print("Occurrences found:", len(diagnostic_matches))
+
+            for match in diagnostic_matches:
+                start = max(0, match.start() - 150)
+                end = min(len(wikitext), match.end() + 500)
+
+                print("\n------------------------------")
+                print(wikitext[start:end])
+
+```

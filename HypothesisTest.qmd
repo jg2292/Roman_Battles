@@ -1,0 +1,4082 @@
+---
+title: "Spatial Hypothesis Testing of Roman Battles"
+subtitle: "Battle Locations, Settlements, and Roman Territorial Boundaries"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+jupyter: python3
+---
+
+
+# Load Data
+
+
+```{python}
+from pathlib import Path
+
+import pandas as pd
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Explicit project root
+project_root = Path(r"C:\Users\PC\code\6750\Final Project")
+
+# Data directory
+data_dir = project_root / "Datacollection"
+
+# Define data folders
+boundary_dir = data_dir / "roman_boundaries"
+settlement_dir = data_dir / "roman_cities"
+
+print("Project root:", project_root)
+print("Data directory:", data_dir)
+
+# Load settlement data
+settlements_gdf = gpd.read_file(
+    settlement_dir / "pleiades_settlements.geojson"
+)
+
+# Load battle-location links
+battle_locations_df = pd.read_csv(
+    data_dir / "roman_battle_location_links.csv"
+)
+
+# Load Roman territorial boundaries
+boundary_files = {
+    "roman_264_BC": "roman_264_BC.geojson",
+    "roman_133_BC": "roman_133_BC.geojson",
+    "roman_60_BC": "roman_60_BC.geojson",
+    "roman_44_BC": "roman_44_BC.geojson",
+    "roman_14_AD": "roman_14_AD.geojson",
+    "roman_69_AD": "roman_69_AD.geojson",
+    "roman_117_AD": "roman_117_AD.geojson",
+    "roman_200_AD": "roman_200_AD.geojson",
+    "roman_314_AD": "roman_314_AD.geojson"
+}
+
+boundaries_gdf = {
+    period: gpd.read_file(boundary_dir / filename)
+    for period, filename in boundary_files.items()
+}
+
+# Display basic information
+print("\nSettlement records:", len(settlements_gdf))
+print("Battle-location records:", len(battle_locations_df))
+print("Boundary periods:", len(boundaries_gdf))
+
+print("\nBattle-location columns:")
+print(battle_locations_df.columns.tolist())
+
+print("\nSettlement columns:")
+print(settlements_gdf.columns.tolist())
+
+```
+
+## Initial Data Inspection
+
+Before conducting the spatial analysis, we inspect the three datasets to understand their coverage, attributes, and spatial structure.
+
+
+```{python}
+# Battle data inspection
+print("Unique battles:", battle_locations_df["battle_wikidata_id"].nunique())
+
+print(
+    "Battle records with coordinates:",
+    battle_locations_df[
+        ["location_latitude", "location_longitude"]
+    ].notna().all(axis=1).sum()
+)
+
+print("\nBattle classifications:")
+print(battle_locations_df["classification"].value_counts(dropna=False))
+
+# Settlement data inspection
+print("\nSettlement feature types:")
+print(settlements_gdf["FEATURETYP"].value_counts().head(15))
+
+print("\nSettlement date range:")
+print("Earliest date:", settlements_gdf["MINDATE"].min())
+print("Latest date:", settlements_gdf["MAXDATE"].max())
+
+print("\nSettlement CRS:", settlements_gdf.crs)
+print("Settlement geometry types:")
+print(settlements_gdf.geometry.geom_type.value_counts())
+
+# Boundary data inspection
+print("\nBoundary CRS and geometry types:")
+
+for period, boundary_gdf in boundaries_gdf.items():
+    print(
+        period,
+        "| CRS:", boundary_gdf.crs,
+        "| Geometry:", boundary_gdf.geometry.geom_type.unique()
+    )
+
+```
+
+# Hypothesis Testing Prep
+
+## Preparing the Observed Battle Locations
+
+We begin by preparing the observed battle locations as a spatial point dataset. Each battle location is assigned to one of the historical Roman territorial periods based on its date.
+
+
+```{python}
+# Convert battle coordinates to numeric values
+battle_locations_df["location_latitude"] = pd.to_numeric(
+    battle_locations_df["location_latitude"],
+    errors="coerce"
+)
+
+battle_locations_df["location_longitude"] = pd.to_numeric(
+    battle_locations_df["location_longitude"],
+    errors="coerce"
+)
+
+# Keep records with valid geographic coordinates
+battle_locations_valid = battle_locations_df.dropna(
+    subset=["location_latitude", "location_longitude"]
+).copy()
+
+battle_locations_valid = battle_locations_valid[
+    battle_locations_valid["location_latitude"].between(-90, 90)
+    & battle_locations_valid["location_longitude"].between(-180, 180)
+].copy()
+
+# Convert battle locations into a GeoDataFrame
+battle_gdf = gpd.GeoDataFrame(
+    battle_locations_valid,
+    geometry=gpd.points_from_xy(
+        battle_locations_valid["location_longitude"],
+        battle_locations_valid["location_latitude"]
+    ),
+    crs="EPSG:4326"
+)
+
+# Extract the year from the Wikidata date
+battle_gdf["battle_year"] = (
+    battle_gdf["battle_date"]
+    .astype(str)
+    .str.extract(r"^([+-]\d{4})")[0]
+)
+
+battle_gdf["battle_year"] = pd.to_numeric(
+    battle_gdf["battle_year"],
+    errors="coerce"
+)
+
+print("Battle-location records:", len(battle_gdf))
+print("Unique battles:", battle_gdf["battle_wikidata_id"].nunique())
+print("Records without a usable date:", battle_gdf["battle_year"].isna().sum())
+
+```
+
+
+## Assign Battles to Historical Periods
+
+```{python}
+# Define available Roman boundary snapshots
+boundary_years = {
+    "roman_264_BC": -264,
+    "roman_133_BC": -133,
+    "roman_60_BC": -60,
+    "roman_44_BC": -44,
+    "roman_14_AD": 14,
+    "roman_69_AD": 69,
+    "roman_117_AD": 117,
+    "roman_200_AD": 200,
+    "roman_314_AD": 314
+}
+
+# Assign each battle to the closest boundary snapshot
+def assign_period(year):
+    if pd.isna(year):
+        return None
+
+    closest_period = min(
+        boundary_years,
+        key=lambda period: abs(year - boundary_years[period])
+    )
+
+    return closest_period
+
+
+# Apply the assignment
+battle_gdf["boundary_period"] = battle_gdf["battle_year"].apply(
+    assign_period
+)
+
+# Summarize battle locations by assigned boundary snapshot
+period_summary = (
+    battle_gdf
+    .groupby("boundary_period")
+    .agg(
+        battle_location_records=("battle_wikidata_id", "size"),
+        unique_battles=("battle_wikidata_id", "nunique")
+    )
+    .reindex(boundary_years.keys(), fill_value=0)
+    .reset_index()
+    .rename(columns={"index": "boundary_period"})
+)
+
+print(period_summary.to_string(index=False))
+```
+
+#### Check for Missing Battles
+
+```{python}
+print(
+    "Records without a boundary assignment:",
+    battle_gdf["boundary_period"].isna().sum()
+)
+
+print(
+    "Unique battles without a boundary assignment:",
+    battle_gdf.loc[
+        battle_gdf["boundary_period"].isna(),
+        "battle_wikidata_id"
+    ].nunique()
+)
+
+print("Total battle-location records:", len(battle_gdf))
+print("Total unique battles:", battle_gdf["battle_wikidata_id"].nunique())
+
+print("\nPeriod totals:")
+print(period_summary[[
+    "battle_location_records",
+    "unique_battles"
+]].sum())
+
+```
+
+## Defining the Geographic Study Area for Settlements
+
+We define the geographic extent of the analysis using the Roman Empire boundary snapshot from 314 AD. The study area includes the imperial territory and a 500 km surrounding buffer.
+
+```{python}
+# Select the 314 AD boundary
+boundary_314 = boundaries_gdf["roman_314_AD"].copy()
+
+# Define a regional projection suitable for distance calculations
+metric_crs = (
+    "+proj=aeqd +lat_0=35 +lon_0=15 "
+    "+datum=WGS84 +units=m +no_defs"
+)
+
+# Check boundary geometry
+print("Boundary CRS:", boundary_314.crs)
+print("Boundary geometry types:")
+print(boundary_314.geometry.geom_type.value_counts())
+
+# Project and combine boundary geometries
+boundary_314_projected = boundary_314.to_crs(metric_crs)
+
+boundary_314_union = boundary_314_projected.geometry.union_all()
+
+# Create a 500 km buffer around the imperial territory
+buffer_distance = 500_000
+
+study_area_geometry = boundary_314_union.buffer(buffer_distance)
+
+# Create a GeoDataFrame for the study area
+study_area_gdf = gpd.GeoDataFrame(
+    {"name": ["Roman Empire 314 AD + 500 km buffer"]},
+    geometry=[study_area_geometry],
+    crs=metric_crs
+)
+
+print("\nStudy area created.")
+print("Buffer distance:", buffer_distance / 1000, "km")
+
+```
+
+### Filter the Pleiades settlements
+
+```{python}
+# Keep valid, non-empty point geometries
+settlements_points = settlements_gdf[
+    (settlements_gdf.geometry.geom_type == "Point")
+    & settlements_gdf.geometry.notna()
+    & ~settlements_gdf.geometry.is_empty
+].copy()
+
+# Project settlements to the same metric CRS
+settlements_projected = settlements_points.to_crs(metric_crs)
+
+# Keep settlements within the buffered study area
+settlements_projected["within_study_area"] = (
+    settlements_projected.geometry.within(study_area_geometry)
+)
+
+settlements_filtered = settlements_projected[
+    settlements_projected["within_study_area"]
+].copy()
+
+# Return filtered settlements to WGS84
+settlements_filtered = settlements_filtered.to_crs("EPSG:4326")
+
+print("Original settlement records:", len(settlements_gdf))
+print("Valid point settlements:", len(settlements_points))
+print("Settlements within study area:", len(settlements_filtered))
+print(
+    "Settlements excluded:",
+    len(settlements_gdf) - len(settlements_filtered)
+)
+
+```
+
+
+
+### 4. Visualize the study area
+
+```{python}
+
+fig, ax = plt.subplots(figsize=(14, 10))
+
+# Plot buffered study area
+study_area_gdf.plot(
+    ax=ax,
+    color="#E8E8E8",
+    edgecolor="#63666A",
+    alpha=0.6
+)
+
+# Plot original Roman territory
+boundary_314_projected.plot(
+    ax=ax,
+    color="#B8C9D9",
+    edgecolor="#041E42",
+    alpha=0.7
+)
+
+# Plot filtered settlements
+settlements_projected[
+    settlements_projected["within_study_area"]
+].plot(
+    ax=ax,
+    color="#A23B3B",
+    markersize=2,
+    alpha=0.5
+)
+
+ax.set_title(
+    "Study Area: Roman Empire in 314 AD with 500 km Buffer",
+    fontsize=15
+)
+
+ax.set_axis_off()
+plt.show()
+
+```
+
+### Partition Settlements
+
+
+```{python}
+# Create a separate settlement dataset for each boundary snapshot.
+settlement_periods = {}
+
+for period, year in boundary_years.items():
+
+    # Include settlements whose date ranges contain the snapshot year.
+    period_settlements = settlements_filtered[
+        (settlements_filtered["MINDATE"] <= year)
+        & (settlements_filtered["MAXDATE"] >= year)
+    ].copy()
+
+    period_settlements["boundary_period"] = period
+    period_settlements["boundary_year"] = year
+
+    settlement_periods[period] = period_settlements
+
+settlement_period_summary = pd.DataFrame([
+    {
+        "boundary_period": period,
+        "boundary_year": year,
+        "settlement_records": len(settlement_periods[period]),
+        "unique_settlements": settlement_periods[period]["TITLE"].nunique()
+    }
+    for period, year in boundary_years.items()
+])
+
+display(settlement_period_summary)    
+```
+
+
+#### Check
+
+```{python}
+# Count settlements by exact date-range endpoints.
+print("Most common MINDATE values:")
+print(settlements_filtered["MINDATE"].value_counts().head(15))
+
+print("\nMost common MAXDATE values:")
+print(settlements_filtered["MAXDATE"].value_counts().head(15))
+
+# Compare membership across the nine snapshots.
+membership_check = (
+    pd.concat(settlement_periods.values())
+    .groupby(["TITLE", "MINDATE", "MAXDATE"])
+    ["boundary_period"]
+    .nunique()
+    .reset_index(name="period_count")
+)
+
+print("\nNumber of settlements by number of periods represented:")
+print(membership_check["period_count"].value_counts().sort_index())
+
+```
+
+### Create spatial settlement distributions
+
+```{python}
+# Check the coordinate reference systems.
+print("Settlement CRS:", settlements_filtered.crs)
+
+for period, gdf in settlement_periods.items():
+    print(period, gdf.crs)
+
+metric_crs = (
+    "+proj=aeqd +lat_0=35 +lon_0=15 "
+    "+datum=WGS84 +units=m +no_defs"
+)
+
+# Project each historical settlement dataset.
+settlement_periods_projected = {
+    period: gdf.to_crs(metric_crs)
+    for period, gdf in settlement_periods.items()
+}
+
+
+```
+
+#### Visualize
+
+```{python}
+fig, axes = plt.subplots(
+    3, 3,
+    figsize=(18, 15)
+)
+
+for ax, (period, gdf) in zip(axes.flat, settlement_periods_projected.items()):
+
+    gdf.plot(
+        ax=ax,
+        markersize=2,
+        color="#041E42",
+        alpha=0.5
+    )
+
+    ax.set_title(
+        f"{period}\n{len(gdf):,} settlements"
+    )
+
+    ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()
+
+```
+
+# Battles
+
+```{python}
+# Project observed battle locations into the metric coordinate system
+battle_projected = battle_gdf.to_crs(metric_crs)
+
+# Keep battles within the defined study area
+battle_projected["within_study_area"] = (
+    battle_projected.geometry.within(study_area_geometry)
+)
+
+battle_projected = battle_projected[
+    battle_projected["within_study_area"]
+].copy()
+
+# Split observed battles by historical snapshot
+battle_periods = {
+    period: gdf.copy()
+    for period, gdf in battle_projected.groupby("boundary_period")
+}
+
+# Report the number of observed battle locations in each period
+battle_period_summary = pd.DataFrame([
+    {
+        "boundary_period": period,
+        "boundary_year": year,
+        "battle_location_records": len(battle_periods.get(period, [])),
+        "unique_battles": (
+            battle_periods[period]["battle_wikidata_id"].nunique()
+            if period in battle_periods else 0
+        )
+    }
+    for period, year in boundary_years.items()
+])
+
+print("Battle locations inside study area:", len(battle_projected))
+print(
+    "Battle locations excluded:",
+    len(battle_gdf) - len(battle_projected)
+)
+
+display(battle_period_summary)
+
+```
+
+# Spatial Randomness Test
+
+## Prepare the observed battle locations
+
+```{python}
+from scipy.spatial import cKDTree
+from shapely import contains_xy
+
+# Project observed battle locations
+battle_projected = battle_gdf.to_crs(metric_crs)
+
+# Keep battles within the study area
+battle_projected = battle_projected[
+    battle_projected.geometry.within(study_area_geometry)
+].copy()
+
+# Extract battle coordinates
+observed_coordinates = np.column_stack([
+    battle_projected.geometry.x,
+    battle_projected.geometry.y
+])
+
+print("Battle-location records inside study area:", len(observed_coordinates))
+print(
+    "Unique battles inside study area:",
+    battle_projected["battle_wikidata_id"].nunique()
+)
+print(
+    "Study area (square km):",
+    round(study_area_geometry.area / 1_000_000, 2)
+)
+
+```
+
+## Calculate the observed nearest-neighbor distances
+
+```{python}
+# Calculate nearest-neighbor distances
+def mean_nearest_neighbor_distance(coordinates):
+
+    tree = cKDTree(coordinates)
+
+    # k=2 returns the point itself and its nearest other neighbor
+    distances, indices = tree.query(coordinates, k=2)
+
+    # Ignore the distance to the point itself
+    nearest_distances = distances[:, 1]
+
+    return nearest_distances.mean()
+
+
+# Calculate observed mean nearest-neighbor distance
+observed_mean_nn = mean_nearest_neighbor_distance(
+    observed_coordinates
+)
+
+print(
+    "Observed mean nearest-neighbor distance:",
+    round(observed_mean_nn / 1000, 2),
+    "km"
+)
+```
+
+## Generate random battle locations
+
+```{python}
+# Generate random points uniformly inside the study area
+def generate_random_points(n, study_area, rng):
+
+    min_x, min_y, max_x, max_y = study_area.bounds
+
+    accepted_coordinates = []
+
+    while sum(len(batch) for batch in accepted_coordinates) < n:
+
+        # Generate candidate points inside the bounding box
+        candidates = np.column_stack([
+            rng.uniform(min_x, max_x, size=n),
+            rng.uniform(min_y, max_y, size=n)
+        ])
+
+        # Retain only points inside the study area
+        inside = contains_xy(
+            study_area,
+            candidates[:, 0],
+            candidates[:, 1]
+        )
+
+        accepted_coordinates.append(candidates[inside])
+
+    # Combine accepted points and retain exactly n
+    return np.vstack(accepted_coordinates)[:n]
+
+
+# Test the function with one simulated pattern
+rng = np.random.default_rng(5300)
+
+simulated_coordinates = generate_random_points(
+    n=len(observed_coordinates),
+    study_area=study_area_geometry,
+    rng=rng
+)
+
+print("Observed points:", len(observed_coordinates))
+print("Simulated points:", len(simulated_coordinates))
+
+# Calculate the simulated mean nearest-neighbor distance
+simulated_mean_nn = mean_nearest_neighbor_distance(
+    simulated_coordinates
+)
+
+print(
+    "Simulated mean nearest-neighbor distance:",
+    round(simulated_mean_nn / 1000, 2),
+    "km"
+)
+
+```
+
+## Run the Monte Carlo simulation
+
+```{python}
+# Number of Monte Carlo simulations
+n_simulations = 999
+
+# Set random seed
+rng = np.random.default_rng(5300)
+
+# Store simulated test statistics
+simulated_mean_distances = []
+
+for i in range(n_simulations):
+
+    # Generate a random battle pattern
+    simulated_coordinates = generate_random_points(
+        n=len(observed_coordinates),
+        study_area=study_area_geometry,
+        rng=rng
+    )
+
+    # Calculate its mean nearest-neighbor distance
+    simulated_mean_nn = mean_nearest_neighbor_distance(
+        simulated_coordinates
+    )
+
+    simulated_mean_distances.append(simulated_mean_nn)
+
+
+# Convert results into a DataFrame
+simulation_results = pd.DataFrame({
+    "mean_nearest_neighbor_km": (
+        np.array(simulated_mean_distances) / 1000
+    )
+})
+
+display(simulation_results.head())
+
+print("Completed simulations:", len(simulation_results))
+
+```
+
+## Compare observed and simulated distances
+
+```{python}
+# Convert observed statistic to kilometers
+observed_mean_nn_km = observed_mean_nn / 1000
+
+# Plot simulated distribution
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.hist(
+    simulation_results["mean_nearest_neighbor_km"],
+    bins=30,
+    density=True,
+    color="#B8C9D9",
+    edgecolor="white",
+    alpha=0.9
+)
+
+# Add observed statistic
+ax.axvline(
+    observed_mean_nn_km,
+    color="#A23B3B",
+    linestyle="--",
+    linewidth=2,
+    label=f"Observed: {observed_mean_nn_km:.2f} km"
+)
+
+ax.set_title(
+    "Observed vs. Random Battle Distributions",
+    fontsize=14
+)
+
+ax.set_xlabel("Mean nearest-neighbor distance (km)")
+ax.set_ylabel("Density")
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Calculate the Monte Carlo p-value
+
+```{python}
+# Count simulations with a mean distance at least as small as observed
+more_extreme = (
+    simulation_results["mean_nearest_neighbor_km"]
+    <= observed_mean_nn_km
+).sum()
+
+# Calculate empirical Monte Carlo p-value
+p_value = (more_extreme + 1) / (n_simulations + 1)
+
+# Calculate the mean expected distance under the null
+null_mean_nn = simulation_results[
+    "mean_nearest_neighbor_km"
+].mean()
+
+# Calculate the ratio of observed to expected distance
+clustering_ratio = observed_mean_nn_km / null_mean_nn
+
+print("Observed mean distance:", round(observed_mean_nn_km, 2), "km")
+print("Expected mean distance under CSR:", round(null_mean_nn, 2), "km")
+print("Observed / expected ratio:", round(clustering_ratio, 3))
+print("Simulations as extreme as observed:", more_extreme)
+print("Monte Carlo p-value:", round(p_value, 4))
+
+```
+
+
+# Settlement Based Hypothesis
+
+## Prepare the period-specific battle and settlement datasets
+
+```{python}
+# Project all battle locations into the metric CRS
+battle_projected = battle_gdf.to_crs(metric_crs)
+
+# Restrict battles to the study area
+battle_projected = battle_projected[
+    battle_projected.geometry.within(study_area_geometry)
+].copy()
+
+# Project all geographically filtered settlements
+settlements_projected = settlements_filtered.to_crs(metric_crs)
+
+print("BATTLE LOCATIONS")
+print("Battle-location records:", len(battle_projected))
+print(
+    "Unique battles:",
+    battle_projected["battle_wikidata_id"].nunique()
+)
+
+print("\nSETTLEMENTS")
+print("Settlement records:", len(settlements_projected))
+print("Study area:", study_area_geometry.geom_type)
+
+```
+
+## Estimate settlement intensity
+
+```{python}
+from sklearn.neighbors import KernelDensity
+from shapely import contains_xy
+
+# Extract settlement coordinates
+settlement_coordinates = np.column_stack([
+    settlements_projected.geometry.x,
+    settlements_projected.geometry.y
+])
+
+# Define KDE bandwidth
+bandwidth = 50_000
+
+# Fit Gaussian KDE
+kde = KernelDensity(
+    kernel="gaussian",
+    bandwidth=bandwidth
+)
+
+kde.fit(settlement_coordinates)
+
+print("Number of settlements:", len(settlement_coordinates))
+print("KDE bandwidth:", bandwidth / 1000, "km")
+
+```
+
+
+
+
+
+### Evaluate the KDE across the study area
+
+```{python}
+# Define grid resolution
+grid_resolution = 20_000
+
+# Get study area bounds
+min_x, min_y, max_x, max_y = study_area_geometry.bounds
+
+# Create grid coordinates
+x_coordinates = np.arange(
+    min_x + grid_resolution / 2,
+    max_x,
+    grid_resolution
+)
+
+y_coordinates = np.arange(
+    min_y + grid_resolution / 2,
+    max_y,
+    grid_resolution
+)
+
+grid_x, grid_y = np.meshgrid(
+    x_coordinates,
+    y_coordinates
+)
+
+grid_points = np.column_stack([
+    grid_x.ravel(),
+    grid_y.ravel()
+])
+
+# Identify grid cells inside study area
+inside_study_area = contains_xy(
+    study_area_geometry,
+    grid_points[:, 0],
+    grid_points[:, 1]
+)
+
+# Estimate KDE inside study area
+intensity_values = np.full(len(grid_points), np.nan)
+
+intensity_values[inside_study_area] = np.exp(
+    kde.score_samples(grid_points[inside_study_area])
+)
+
+# Reshape intensity values
+intensity_grid = intensity_values.reshape(grid_x.shape)
+
+print("Grid dimensions:", intensity_grid.shape)
+print("Grid cells inside study area:", inside_study_area.sum())
+
+```
+
+### Deeper  Check
+
+```{python}
+print("STUDY AREA")
+print("CRS:", study_area_gdf.crs)
+print("Bounds:", study_area_geometry.bounds)
+print("Geometry type:", study_area_geometry.geom_type)
+
+print("\nSETTLEMENTS")
+# print("CRS:", settlements_for_kde.crs)
+print("Number of settlements:", len(settlement_coordinates))
+print("Coordinate bounds:")
+print(
+    "X:", settlement_coordinates[:, 0].min(),
+    "to", settlement_coordinates[:, 0].max()
+)
+print(
+    "Y:", settlement_coordinates[:, 1].min(),
+    "to", settlement_coordinates[:, 1].max()
+)
+
+print("\nKDE GRID")
+print("Grid cells:", len(grid_points))
+print("Cells inside study area:", inside_study_area.sum())
+print("Cells outside study area:", (~inside_study_area).sum())
+print("Finite intensity values:", np.isfinite(intensity_values).sum())
+print("Minimum intensity:", np.nanmin(intensity_values))
+print("Maximum intensity:", np.nanmax(intensity_values))
+
+```
+
+
+
+
+###  Visualize the settlement intensity surface
+
+```{python}
+from shapely.affinity import scale
+
+# Convert study area boundary to kilometers
+study_area_km = study_area_gdf.copy()
+
+study_area_km["geometry"] = study_area_km.geometry.apply(
+    lambda geom: scale(
+        geom,
+        xfact=0.001,
+        yfact=0.001,
+        origin=(0, 0)
+    )
+)
+
+# Plot settlement intensity
+fig, ax = plt.subplots(figsize=(14, 10))
+
+intensity_plot = ax.pcolormesh(
+    grid_x / 1000,
+    grid_y / 1000,
+    intensity_grid,
+    shading="auto",
+    cmap="magma"
+)
+
+study_area_km.boundary.plot(
+    ax=ax,
+    color="#333333",
+    linewidth=0.8
+)
+
+ax.scatter(
+    settlement_coordinates[:, 0] / 1000,
+    settlement_coordinates[:, 1] / 1000,
+    s=2,
+    color="cyan",
+    alpha=0.25,
+    label="Pleiades settlements"
+)
+
+fig.colorbar(
+    intensity_plot,
+    ax=ax,
+    label="Estimated settlement intensity"
+)
+
+ax.set_title(
+    "Pleiades Settlement Intensity — Full Dataset",
+    fontsize=15
+)
+
+ax.set_xlabel("Easting (km)")
+ax.set_ylabel("Northing (km)")
+ax.legend(loc="upper right")
+ax.set_aspect("equal")
+
+plt.tight_layout()
+plt.show()
+```
+
+## Simulate battle points for 314 AD
+
+### Convert KDE intensity into sampling probabilities
+```{python}
+# Flatten KDE intensity surface
+intensity_flat = intensity_grid.ravel()
+
+# Keep grid cells inside study area
+valid_cells = np.isfinite(intensity_flat)
+
+valid_coordinates = grid_points[valid_cells]
+valid_intensities = intensity_flat[valid_cells]
+
+# Normalize intensity into probabilities
+sampling_probabilities = (
+    valid_intensities / valid_intensities.sum()
+)
+
+print("Valid grid cells:", len(valid_coordinates))
+print(
+    "Sum of sampling probabilities:",
+    sampling_probabilities.sum()
+)
+```
+
+## Function for Battle Simulation
+
+```{python}
+from shapely.geometry import Point
+
+def simulate_battle_points(
+    n,
+    grid_coordinates,
+    probabilities,
+    grid_resolution,
+    study_area,
+    rng
+):
+    simulated_coordinates = []
+
+    while len(simulated_coordinates) < n:
+
+        # Select a grid cell using its KDE probability
+        cell_index = rng.choice(
+            len(grid_coordinates),
+            p=probabilities
+        )
+
+        cell_x, cell_y = grid_coordinates[cell_index]
+
+        # Randomly position a point within the selected cell
+        x = rng.uniform(
+            cell_x - grid_resolution / 2,
+            cell_x + grid_resolution / 2
+        )
+
+        y = rng.uniform(
+            cell_y - grid_resolution / 2,
+            cell_y + grid_resolution / 2
+        )
+
+        # Retain points inside study area
+        if study_area.contains(Point(x, y)):
+            simulated_coordinates.append([x, y])
+
+    return np.array(simulated_coordinates)
+```
+
+### Generate one simulated battle pattern
+
+```{python}
+# Use the full observed battle dataset
+observed_battles = battle_projected.copy()
+
+# Number of observed battle locations
+n_battles = len(observed_battles)
+
+# Generate one simulated pattern
+rng = np.random.default_rng(5300)
+
+simulated_coordinates = simulate_battle_points(
+    n=n_battles,
+    grid_coordinates=valid_coordinates,
+    probabilities=sampling_probabilities,
+    grid_resolution=grid_resolution,
+    study_area=study_area_geometry,
+    rng=rng
+)
+
+# Convert simulated coordinates into GeoDataFrame
+simulated_battles = gpd.GeoDataFrame(
+    {"simulation": np.ones(len(simulated_coordinates), dtype=int)},
+    geometry=gpd.points_from_xy(
+        simulated_coordinates[:, 0],
+        simulated_coordinates[:, 1]
+    ),
+    crs=metric_crs
+)
+
+print("Observed battle locations:", n_battles)
+print("Simulated battle locations:", len(simulated_battles))
+```
+
+### Visualize
+
+```{python}
+fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+
+# Observed battles
+study_area_gdf.boundary.plot(
+    ax=axes[0],
+    color="#333333",
+    linewidth=0.7
+)
+
+observed_battles.plot(
+    ax=axes[0],
+    color="#A23B3B",
+    markersize=10,
+    alpha=0.7
+)
+
+axes[0].set_title("Observed Battles — Full Dataset")
+axes[0].set_aspect("equal")
+
+# Simulated battles
+study_area_gdf.boundary.plot(
+    ax=axes[1],
+    color="#333333",
+    linewidth=0.7
+)
+
+simulated_battles.plot(
+    ax=axes[1],
+    color="#2676A5",
+    markersize=10,
+    alpha=0.7
+)
+
+axes[1].set_title("Simulated Battles — Settlement-Based Model")
+axes[1].set_aspect("equal")
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Settlement Based Monte Carlo simulations
+
+```{python}
+# Number of simulations
+n_simulations = 999
+
+settlement_simulated_distances = []
+
+rng = np.random.default_rng(5300)
+
+for i in range(n_simulations):
+
+    simulated_coordinates = simulate_battle_points(
+        n=n_battles,
+        grid_coordinates=valid_coordinates,
+        probabilities=sampling_probabilities,
+        grid_resolution=grid_resolution,
+        study_area=study_area_geometry,
+        rng=rng
+    )
+
+    simulated_mean_nn = mean_nearest_neighbor_distance(
+        simulated_coordinates
+    )
+
+    settlement_simulated_distances.append(simulated_mean_nn)
+
+
+# Convert results to kilometers
+settlement_simulation_results = pd.DataFrame({
+    "mean_nearest_neighbor_km": (
+        np.array(settlement_simulated_distances) / 1000
+    )
+})
+
+print("Completed simulations:", len(settlement_simulation_results))
+display(settlement_simulation_results.head())
+
+```
+
+### Compare observed and simulated distances
+
+```{python}
+# Calculate observed mean nearest-neighbor distance
+observed_coordinates = np.column_stack([
+    observed_battles.geometry.x,
+    observed_battles.geometry.y
+])
+
+observed_mean_nn_km = (
+    mean_nearest_neighbor_distance(observed_coordinates) / 1000
+)
+
+# Calculate expected distance under settlement model
+settlement_null_mean_nn = (
+    settlement_simulation_results[
+        "mean_nearest_neighbor_km"
+    ].mean()
+)
+
+# Calculate observed-to-expected ratio
+settlement_clustering_ratio = (
+    observed_mean_nn_km / settlement_null_mean_nn
+)
+
+print(
+    "Observed mean distance:",
+    round(observed_mean_nn_km, 2),
+    "km"
+)
+
+print(
+    "Expected distance under settlement model:",
+    round(settlement_null_mean_nn, 2),
+    "km"
+)
+
+print(
+    "Observed / expected ratio:",
+    round(settlement_clustering_ratio, 3)
+)
+
+```
+
+### Visualize the Monte Carlo distribution
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.hist(
+    settlement_simulation_results["mean_nearest_neighbor_km"],
+    bins=30,
+    density=True,
+    color="#B8C9D9",
+    edgecolor="white",
+    alpha=0.9
+)
+
+ax.axvline(
+    observed_mean_nn_km,
+    color="#A23B3B",
+    linestyle="--",
+    linewidth=2,
+    label=f"Observed: {observed_mean_nn_km:.2f} km"
+)
+
+ax.axvline(
+    settlement_null_mean_nn,
+    color="#041E42",
+    linestyle="-",
+    linewidth=2,
+    label=f"Settlement model mean: {settlement_null_mean_nn:.2f} km"
+)
+
+ax.set_title(
+    "Observed vs. Settlement-Based Simulated Battles — Full Dataset",
+    fontsize=14
+)
+
+ax.set_xlabel("Mean nearest-neighbor distance (km)")
+ax.set_ylabel("Density")
+ax.legend()
+
+plt.tight_layout()
+plt.show()
+```
+
+### Calculate the Monte Carlo p-value
+
+```{python}
+# Count simulations at least as clustered as observed
+more_extreme = (
+    settlement_simulation_results["mean_nearest_neighbor_km"]
+    <= observed_mean_nn_km
+).sum()
+
+# Calculate empirical Monte Carlo p-value
+settlement_p_value = (
+    more_extreme + 1
+) / (n_simulations + 1)
+
+print("Analysis: Full historical dataset")
+print("Observed battle locations:", n_battles)
+
+print(
+    "Observed mean distance:",
+    round(observed_mean_nn_km, 2),
+    "km"
+)
+
+print(
+    "Expected distance under settlement model:",
+    round(settlement_null_mean_nn, 2),
+    "km"
+)
+
+print(
+    "Observed / expected ratio:",
+    round(settlement_clustering_ratio, 3)
+)
+
+print("Simulations as extreme as observed:", more_extreme)
+print("Monte Carlo p-value:", round(settlement_p_value, 4))
+
+```
+
+
+# Border Based Hypothesis
+This simulation keeps the settlement KDE, but uses distance to border as a test statistic 
+
+## Border Geometries
+```{python}
+# Prepare projected territorial geometries and their perimeters
+from shapely import make_valid
+
+boundary_territories = {}
+boundary_perimeters = {}
+
+boundary_summary = []
+
+for period, boundary_gdf in boundaries_gdf.items():
+
+    # Project the boundary snapshot into the metric CRS
+    boundary_projected = boundary_gdf.to_crs(metric_crs).copy()
+
+    # Repair invalid geometries before combining them
+    boundary_projected["geometry"] = (
+        boundary_projected.geometry.apply(make_valid)
+    )
+
+    # Combine all features into one territorial geometry
+    territory_geometry = boundary_projected.geometry.union_all()
+
+    # Extract the territorial perimeter
+    perimeter_geometry = territory_geometry.boundary
+
+    # Store both geometries for later analysis
+    boundary_territories[period] = territory_geometry
+    boundary_perimeters[period] = perimeter_geometry
+
+    # Record basic information about the boundary
+    boundary_summary.append({
+        "boundary_period": period,
+        "territory_type": territory_geometry.geom_type,
+        "perimeter_type": perimeter_geometry.geom_type,
+        "territory_area_km2": territory_geometry.area / 1_000_000,
+        "perimeter_length_km": perimeter_geometry.length / 1_000
+    })
+
+
+# Display summary of all nine boundaries
+boundary_summary_df = pd.DataFrame(boundary_summary)
+
+display(boundary_summary_df)
+
+```
+
+### The nine perimeters 
+
+```{python}
+# Create one map for each historical boundary snapshot
+fig, axes = plt.subplots(
+    3, 3,
+    figsize=(18, 15)
+)
+
+for ax, (period, perimeter) in zip(
+    axes.flat,
+    boundary_perimeters.items()
+):
+
+    # Plot the territorial perimeter
+    perimeter_gdf = gpd.GeoDataFrame(
+        {"boundary_period": [period]},
+        geometry=[perimeter],
+        crs=metric_crs
+    )
+
+    perimeter_gdf.plot(
+        ax=ax,
+        color="#041E42",
+        linewidth=0.8
+    )
+
+    ax.set_title(period)
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+plt.suptitle(
+    "Roman Territorial Perimeters by Historical Snapshot",
+    fontsize=16,
+    y=1.02
+)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Calculate observed battle distances to the historical borders
+
+```{python}
+# Project battle locations into the metric CRS
+battle_border_gdf = battle_gdf.to_crs(metric_crs).copy()
+
+# Keep only battle locations inside the study area
+battle_border_gdf["within_study_area"] = (
+    battle_border_gdf.geometry.within(study_area_geometry)
+)
+
+battle_border_gdf = battle_border_gdf[
+    battle_border_gdf["within_study_area"]
+].copy()
+
+# Create a column for distance to the appropriate historical border
+battle_border_gdf["border_distance_km"] = np.nan
+
+# Calculate distances separately for each historical period
+for period, period_battles in battle_border_gdf.groupby("boundary_period"):
+
+    # Retrieve the perimeter corresponding to this period
+    perimeter = boundary_perimeters[period]
+
+    # Calculate shortest distance from each battle to that perimeter
+    distances = period_battles.geometry.distance(perimeter) / 1000
+
+    # Store distances in the main GeoDataFrame
+    battle_border_gdf.loc[
+        period_battles.index, "border_distance_km"
+    ] = distances
+
+# Check the resulting distances
+print("Battle-location records included:", len(battle_border_gdf))
+print("Unique battles:", battle_border_gdf["battle_wikidata_id"].nunique())
+print("Missing border distances:", battle_border_gdf["border_distance_km"].isna().sum())
+
+display(
+    battle_border_gdf[
+        [
+            "battle_name",
+            "battle_year",
+            "boundary_period",
+            "border_distance_km"
+        ]
+    ].head(10)
+)
+
+```
+
+### Summarize observed distances
+
+We need to summarize across periods to capture borders at each time, but we still want to simulate the whole picture
+
+```{python}
+# Summarize border distances by historical period
+border_distance_summary = (
+    battle_border_gdf.groupby("boundary_period")
+    .agg(
+        battle_location_records=("battle_wikidata_id", "size"),
+        unique_battles=("battle_wikidata_id", "nunique"),
+        mean_distance_km=("border_distance_km", "mean"),
+        median_distance_km=("border_distance_km", "median"),
+        std_distance_km=("border_distance_km", "std")
+    )
+    .reindex(boundary_years.keys())
+    .reset_index()
+)
+
+display(border_distance_summary)
+
+# Calculate overall statistics across all historical periods
+overall_border_summary = pd.DataFrame({
+    "battle_location_records": [
+        len(battle_border_gdf)
+    ],
+    "unique_battles": [
+        battle_border_gdf["battle_wikidata_id"].nunique()
+    ],
+    "mean_distance_km": [
+        battle_border_gdf["border_distance_km"].mean()
+    ],
+    "median_distance_km": [
+        battle_border_gdf["border_distance_km"].median()
+    ],
+    "std_distance_km": [
+        battle_border_gdf["border_distance_km"].std()
+    ]
+})
+
+display(overall_border_summary)
+
+```
+
+
+##  Calculate the overall observed statistic
+
+```{python}
+# Calculate overall observed border-distance statistics
+observed_border_mean = battle_border_gdf["border_distance_km"].mean()
+observed_border_median = battle_border_gdf["border_distance_km"].median()
+
+observed_border_summary = pd.DataFrame({
+    "statistic": [
+        "Number of battle-location records",
+        "Number of unique battles",
+        "Mean border distance (km)",
+        "Median border distance (km)",
+        "Standard deviation (km)",
+        "25th percentile (km)",
+        "75th percentile (km)",
+        "Maximum distance (km)"
+    ],
+    "value": [
+        len(battle_border_gdf),
+        battle_border_gdf["battle_wikidata_id"].nunique(),
+        observed_border_mean,
+        observed_border_median,
+        battle_border_gdf["border_distance_km"].std(),
+        battle_border_gdf["border_distance_km"].quantile(0.25),
+        battle_border_gdf["border_distance_km"].quantile(0.75),
+        battle_border_gdf["border_distance_km"].max()
+    ]
+})
+
+display(observed_border_summary)
+
+```
+
+### Distance to Perimeter visualized
+
+```{python}
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.hist(
+    battle_border_gdf["border_distance_km"],
+    bins=30,
+    color="#041E42",
+    edgecolor="white"
+)
+
+ax.axvline(
+    observed_border_mean,
+    color="#C8102E",
+    linestyle="--",
+    linewidth=2,
+    label=f"Mean: {observed_border_mean:.1f} km"
+)
+
+ax.axvline(
+    observed_border_median,
+    color="#63666A",
+    linestyle=":",
+    linewidth=2,
+    label=f"Median: {observed_border_median:.1f} km"
+)
+
+ax.set_title("Observed Battle Distances to Roman Territorial Perimeters")
+ax.set_xlabel("Distance to nearest territorial perimeter (km)")
+ax.set_ylabel("Number of battle-location records")
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+
+## Create a common spatial grid
+
+
+```{python}
+# Define KDE parameters
+bandwidth = 50_000       # 50 km
+grid_resolution = 20_000 # 20 km
+
+# Get the bounds of the study area
+min_x, min_y, max_x, max_y = study_area_geometry.bounds
+
+# Create grid cell centers
+grid_x = np.arange(
+    min_x + grid_resolution / 2,
+    max_x,
+    grid_resolution
+)
+
+grid_y = np.arange(
+    min_y + grid_resolution / 2,
+    max_y,
+    grid_resolution
+)
+
+# Create a grid of coordinate pairs
+grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+
+grid_points = np.column_stack([
+    grid_xx.ravel(),
+    grid_yy.ravel()
+])
+
+# Identify grid cells whose centers fall inside the study area
+inside_study_area = contains_xy(
+    study_area_geometry,
+    grid_points[:, 0],
+    grid_points[:, 1]
+)
+
+print("Grid dimensions:", grid_xx.shape)
+print("Total grid cells:", len(grid_points))
+print("Grid cells inside study area:", inside_study_area.sum())
+
+
+```
+
+### Estimate a KDE for each historical period
+
+```{python}
+from sklearn.neighbors import KernelDensity
+
+# Store the intensity surfaces and sampling distributions
+settlement_intensity_surfaces = {}
+settlement_sampling_distributions = {}
+
+for period, settlements in settlement_periods_projected.items():
+
+    # Extract settlement coordinates
+    settlement_coordinates = np.column_stack([
+        settlements.geometry.x,
+        settlements.geometry.y
+    ])
+
+    # Fit a Gaussian KDE to the period-specific settlements
+    kde = KernelDensity(
+        kernel="gaussian",
+        bandwidth=bandwidth
+    )
+
+    kde.fit(settlement_coordinates)
+
+    # Evaluate settlement intensity at grid cells inside the study area
+    intensity_values = np.exp(
+        kde.score_samples(grid_points[inside_study_area])
+    )
+
+    # Create a grid containing the estimated intensity values
+    intensity_flat = np.full(len(grid_points), np.nan)
+    intensity_flat[inside_study_area] = intensity_values
+
+    intensity_grid = intensity_flat.reshape(grid_xx.shape)
+
+    # Extract valid grid coordinates and their intensity values
+    valid_coordinates = grid_points[inside_study_area]
+    valid_intensities = intensity_values
+
+    # Convert intensity values into sampling probabilities
+    sampling_probabilities = (
+        valid_intensities / valid_intensities.sum()
+    )
+
+    # Store the intensity surface
+    settlement_intensity_surfaces[period] = {
+        "intensity_grid": intensity_grid,
+        "kde": kde
+    }
+
+    # Store the sampling distribution
+    settlement_sampling_distributions[period] = {
+        "coordinates": valid_coordinates,
+        "probabilities": sampling_probabilities
+    }
+
+    print(
+        f"{period}: "
+        f"{len(settlements):,} settlements | "
+        f"{len(valid_coordinates):,} valid grid cells"
+    )
+
+```
+
+
+### Visualize the nine intensity surfaces
+
+```{python}
+fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+
+# Use one shared intensity scale across all nine panels
+all_intensities = np.concatenate([
+    surface["intensity_grid"][np.isfinite(surface["intensity_grid"])]
+    for surface in settlement_intensity_surfaces.values()
+])
+
+vmin = all_intensities.min()
+vmax = all_intensities.max()
+
+for ax, (period, surface) in zip(
+    axes.flat,
+    settlement_intensity_surfaces.items()
+):
+
+    image = ax.imshow(
+        surface["intensity_grid"],
+        origin="lower",
+        extent=[
+            grid_x[0] / 1000,
+            grid_x[-1] / 1000,
+            grid_y[0] / 1000,
+            grid_y[-1] / 1000
+        ],
+        cmap="viridis",
+        vmin=vmin,
+        vmax=vmax,
+        aspect="equal"
+    )
+
+    ax.set_title(period)
+    ax.set_xlabel("Easting (km)")
+    ax.set_ylabel("Northing (km)")
+
+fig.colorbar(
+    image,
+    ax=axes.ravel().tolist(),
+    label="Estimated settlement intensity",
+    shrink=0.75
+)
+
+plt.suptitle(
+    "Settlement-Based Spatial Intensity by Historical Period",
+    fontsize=16,
+    y=1.02
+)
+
+plt.show()
+```
+
+
+### Validate the sampling distributions
+
+```{python}
+
+sampling_validation = []
+
+for period, distribution in settlement_sampling_distributions.items():
+
+    probabilities = distribution["probabilities"]
+
+    sampling_validation.append({
+        "boundary_period": period,
+        "number_of_grid_cells": len(probabilities),
+        "probability_sum": probabilities.sum(),
+        "minimum_probability": probabilities.min(),
+        "maximum_probability": probabilities.max(),
+        "all_probabilities_valid": (
+            np.all(np.isfinite(probabilities))
+            and np.all(probabilities >= 0)
+        )
+    })
+
+sampling_validation_df = pd.DataFrame(sampling_validation)
+
+display(sampling_validation_df)
+
+```
+
+
+## Run Period-specific simulations
+
+
+### Check the number of observed battle locations per period 
+```{python}
+
+# Preserve the observed number of battle-location records in each period
+observed_battle_counts = (
+    battle_border_gdf.groupby("boundary_period")
+    .size()
+    .reindex(boundary_years.keys(), fill_value=0)
+)
+
+display(observed_battle_counts.rename("observed_battle_locations").to_frame())
+
+print("Total records:", observed_battle_counts.sum())
+
+```
+
+
+### Define the simulation procedure
+
+```{python}
+from shapely.geometry import Point
+
+def simulate_historical_border_distances(
+    observed_counts,
+    sampling_distributions,
+    perimeters,
+    grid_resolution,
+    study_area,
+    rng
+):
+    simulated_distances = []
+
+    for period, n_battles in observed_counts.items():
+
+        if n_battles == 0:
+            continue
+
+        # Retrieve this period's settlement-based sampling distribution
+        distribution = sampling_distributions[period]
+
+        # Generate the same number of points as observed in this period
+        simulated_coordinates = simulate_battle_points(
+            n=n_battles,
+            grid_coordinates=distribution["coordinates"],
+            probabilities=distribution["probabilities"],
+            grid_resolution=grid_resolution,
+            study_area=study_area,
+            rng=rng
+        )
+
+        # Convert simulated coordinates into spatial points
+        simulated_points = gpd.GeoSeries(
+            [
+                Point(x, y)
+                for x, y in simulated_coordinates
+            ],
+            crs=metric_crs
+        )
+
+        # Measure distance to the corresponding historical perimeter
+        distances = simulated_points.distance(
+            perimeters[period]
+        ) / 1000
+
+        simulated_distances.extend(distances.tolist())
+
+    return np.array(simulated_distances)
+
+```
+
+
+### Run the Simulation
+
+```{python}
+# Set simulation parameters
+n_simulations = 999
+rng = np.random.default_rng(5300)
+
+simulated_border_means = []
+
+for simulation in range(n_simulations):
+
+    # Generate one complete historical simulation
+    simulated_distances = simulate_historical_border_distances(
+        observed_counts=observed_battle_counts,
+        sampling_distributions=settlement_sampling_distributions,
+        perimeters=boundary_perimeters,
+        grid_resolution=grid_resolution,
+        study_area=study_area_geometry,
+        rng=rng
+    )
+
+    # Calculate the overall mean distance across all periods
+    simulated_border_means.append(
+        simulated_distances.mean()
+    )
+
+simulated_border_means = np.array(simulated_border_means)
+
+print("Simulations completed:", len(simulated_border_means))
+print("Observed battle locations:", len(battle_border_gdf))
+print("Simulated distances per iteration:", len(simulated_distances))
+print("Mean simulated border distance:",
+      simulated_border_means.mean())
+print("Standard deviation:",
+      simulated_border_means.std())
+
+```
+
+
+### Calculate the observed-versus-expected comparison
+
+
+```{python}
+# Calculate the expected mean distance under the settlement-based null model
+expected_border_mean = simulated_border_means.mean()
+
+# Calculate observed-to-expected ratio
+border_proximity_ratio = (
+    observed_border_mean / expected_border_mean
+)
+
+# Count simulations with a mean distance at least as small as observed
+simulations_as_extreme = np.sum(
+    simulated_border_means <= observed_border_mean
+)
+
+# Monte Carlo p-value
+border_p_value = (
+    simulations_as_extreme + 1
+) / (
+    n_simulations + 1
+)
+
+# Display results
+border_test_summary = pd.DataFrame({
+    "statistic": [
+        "Observed mean border distance (km)",
+        "Expected mean border distance (km)",
+        "Observed / expected ratio",
+        "Simulations as extreme as observed",
+        "Number of simulations",
+        "Monte Carlo p-value"
+    ],
+    "value": [
+        observed_border_mean,
+        expected_border_mean,
+        border_proximity_ratio,
+        simulations_as_extreme,
+        n_simulations,
+        border_p_value
+    ]
+})
+
+display(border_test_summary)
+
+
+```
+
+#### Visualize the distribution
+
+```{python}
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.hist(
+    simulated_border_means,
+    bins=30,
+    color="#041E42",
+    edgecolor="white",
+    label="Settlement-based simulations"
+)
+
+ax.axvline(
+    observed_border_mean,
+    color="#C8102E",
+    linestyle="--",
+    linewidth=2,
+    label=f"Observed mean: {observed_border_mean:.1f} km"
+)
+
+ax.axvline(
+    expected_border_mean,
+    color="#63666A",
+    linestyle=":",
+    linewidth=2,
+    label=f"Expected mean: {expected_border_mean:.1f} km"
+)
+
+ax.set_title(
+    "Observed vs. Simulated Mean Distance to Roman Borders"
+)
+ax.set_xlabel("Mean distance to historical territorial perimeter (km)")
+ax.set_ylabel("Number of simulations")
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+#### Check
+
+```{python}
+from shapely.geometry import Point
+
+# Use a separate seed so the original 999 simulations remain unchanged
+map_rng = np.random.default_rng(5301)
+
+simulated_battles_map = []
+
+for period, n_battles in observed_battle_counts.items():
+
+    if n_battles == 0:
+        continue
+
+    distribution = settlement_sampling_distributions[period]
+
+    # Generate simulated locations for this historical period
+    simulated_coordinates = simulate_battle_points(
+        n=n_battles,
+        grid_coordinates=distribution["coordinates"],
+        probabilities=distribution["probabilities"],
+        grid_resolution=grid_resolution,
+        study_area=study_area_geometry,
+        rng=map_rng
+    )
+
+    # Store each simulated location
+    for x, y in simulated_coordinates:
+        simulated_battles_map.append({
+            "boundary_period": period,
+            "geometry": Point(x, y)
+        })
+
+# Convert simulated locations into a GeoDataFrame
+simulated_battles_map = gpd.GeoDataFrame(
+    simulated_battles_map,
+    geometry="geometry",
+    crs=metric_crs
+)
+
+print("Simulated battle locations:", len(simulated_battles_map))
+print(
+    simulated_battles_map["boundary_period"]
+    .value_counts()
+    .reindex(boundary_years.keys(), fill_value=0)
+)
+
+```
+
+```{python}
+fig, axes = plt.subplots(3, 3, figsize=(20, 16))
+
+for ax, period in zip(axes.flat, boundary_years.keys()):
+
+    # Retrieve the historical perimeter
+    perimeter = boundary_perimeters[period]
+
+    # Retrieve observed and simulated locations for this period
+    observed_period = battle_border_gdf[
+        battle_border_gdf["boundary_period"] == period
+    ]
+
+    simulated_period = simulated_battles_map[
+        simulated_battles_map["boundary_period"] == period
+    ]
+
+    # Plot the territorial perimeter
+    perimeter_gdf = gpd.GeoDataFrame(
+        geometry=[perimeter],
+        crs=metric_crs
+    )
+
+    perimeter_gdf.plot(
+        ax=ax,
+        color="#041E42",
+        linewidth=1.0,
+        label="Roman territorial perimeter"
+    )
+
+    # Plot simulated battle locations
+    simulated_period.plot(
+        ax=ax,
+        color="#26a69a",
+        markersize=13,
+        alpha=0.55,
+        label="Simulated battles"
+    )
+
+    # Plot observed battle locations
+    observed_period.plot(
+        ax=ax,
+        color="#C8102E",
+        markersize=18,
+        alpha=0.8,
+        marker="x",
+        label="Observed battles"
+    )
+
+    ax.set_title(
+        f"{period}\n"
+        f"Observed: {len(observed_period)} | "
+        f"Simulated: {len(simulated_period)}"
+    )
+
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+# Add one shared legend
+handles, labels = axes.flat[0].get_legend_handles_labels()
+
+fig.legend(
+    handles,
+    labels,
+    loc="lower center",
+    ncol=3,
+    frameon=False,
+    bbox_to_anchor=(0.5, 0.02)
+)
+
+plt.suptitle(
+    "Observed vs. Simulated Battle Locations by Historical Period",
+    fontsize=17,
+    y=0.98
+)
+
+plt.tight_layout(rect=[0, 0.06, 1, 0.95])
+plt.show()
+
+```
+
+## Border Based Model
+
+### Build the border-based sampling distributions
+```{python}
+# Define border-distance decay scales
+decay_distances = [25_000, 50_000, 100_000, 200_000]
+
+# Grid cells inside the study area
+border_model_coordinates = grid_points[inside_study_area]
+
+# Convert grid coordinates to spatial points
+border_model_grid = gpd.GeoSeries(
+    gpd.points_from_xy(
+        border_model_coordinates[:, 0],
+        border_model_coordinates[:, 1]
+    ),
+    crs=metric_crs
+)
+
+# Store border-based sampling distributions
+border_sampling_distributions = {}
+
+for period, perimeter in boundary_perimeters.items():
+
+    # Calculate distance from every grid cell to this period's perimeter
+    grid_border_distances = (
+        border_model_grid.distance(perimeter).to_numpy()
+    )
+
+    for decay_distance in decay_distances:
+
+        # Give locations closer to the border higher sampling weights
+        sampling_weights = np.exp(
+            -grid_border_distances / decay_distance
+        )
+
+        # Normalize weights into probabilities
+        sampling_probabilities = (
+            sampling_weights / sampling_weights.sum()
+        )
+
+        border_sampling_distributions[
+            (period, decay_distance)
+        ] = {
+            "coordinates": border_model_coordinates,
+            "probabilities": sampling_probabilities,
+            "border_distances": grid_border_distances
+        }
+
+print("Border sampling distributions created:",
+      len(border_sampling_distributions))
+
+```
+
+### Validate the distributions
+
+```{python}
+border_validation = []
+
+for (period, decay_distance), distribution in (
+    border_sampling_distributions.items()
+):
+
+    probabilities = distribution["probabilities"]
+
+    border_validation.append({
+        "boundary_period": period,
+        "decay_distance_km": decay_distance / 1000,
+        "probability_sum": probabilities.sum(),
+        "minimum_probability": probabilities.min(),
+        "maximum_probability": probabilities.max(),
+        "valid": (
+            np.all(np.isfinite(probabilities))
+            and np.all(probabilities >= 0)
+        )
+    })
+
+border_validation_df = pd.DataFrame(border_validation)
+
+display(border_validation_df.head(12))
+
+```
+
+
+### Create a simulation function
+
+```{python}
+def simulate_border_points(
+    n,
+    grid_coordinates,
+    probabilities,
+    grid_resolution,
+    study_area,
+    rng
+):
+    # Initially sample candidate grid cells
+    cell_indices = rng.choice(
+        len(grid_coordinates),
+        size=n,
+        replace=True,
+        p=probabilities
+    )
+
+    # Add random offsets within each grid cell
+    x = (
+        grid_coordinates[cell_indices, 0]
+        + rng.uniform(-grid_resolution / 2, grid_resolution / 2, n)
+    )
+
+    y = (
+        grid_coordinates[cell_indices, 1]
+        + rng.uniform(-grid_resolution / 2, grid_resolution / 2, n)
+    )
+
+    # Reject points outside the study area and replace them
+    inside = contains_xy(study_area, x, y)
+
+    while not inside.all():
+
+        n_invalid = (~inside).sum()
+
+        replacement_indices = rng.choice(
+            len(grid_coordinates),
+            size=n_invalid,
+            replace=True,
+            p=probabilities
+        )
+
+        x[~inside] = (
+            grid_coordinates[replacement_indices, 0]
+            + rng.uniform(
+                -grid_resolution / 2,
+                grid_resolution / 2,
+                n_invalid
+            )
+        )
+
+        y[~inside] = (
+            grid_coordinates[replacement_indices, 1]
+            + rng.uniform(
+                -grid_resolution / 2,
+                grid_resolution / 2,
+                n_invalid
+            )
+        )
+
+        inside = contains_xy(study_area, x, y)
+
+    return np.column_stack([x, y])
+
+```
+
+### Run the border-based simulations
+
+```{python}
+# Simulation settings
+n_border_simulations = 999
+border_rng = np.random.default_rng(5302)
+
+# Store simulated mean distances for each decay scale
+border_model_results = {}
+
+for decay_distance in decay_distances:
+
+    simulated_means = []
+
+    for simulation in range(n_border_simulations):
+
+        simulated_distances = []
+
+        for period, n_battles in observed_battle_counts.items():
+
+            if n_battles == 0:
+                continue
+
+            # Retrieve this period's border-based distribution
+            distribution = border_sampling_distributions[
+                (period, decay_distance)
+            ]
+
+            # Generate simulated locations
+            simulated_coordinates = simulate_border_points(
+                n=n_battles,
+                grid_coordinates=distribution["coordinates"],
+                probabilities=distribution["probabilities"],
+                grid_resolution=grid_resolution,
+                study_area=study_area_geometry,
+                rng=border_rng
+            )
+
+            # Calculate distance to the corresponding perimeter
+            simulated_points = gpd.GeoSeries(
+                gpd.points_from_xy(
+                    simulated_coordinates[:, 0],
+                    simulated_coordinates[:, 1]
+                ),
+                crs=metric_crs
+            )
+
+            distances = (
+                simulated_points.distance(
+                    boundary_perimeters[period]
+                ) / 1000
+            )
+
+            simulated_distances.extend(distances.tolist())
+
+        simulated_means.append(np.mean(simulated_distances))
+
+    border_model_results[decay_distance] = np.array(simulated_means)
+
+    print(
+        f"{decay_distance / 1000:.0f} km decay: "
+        f"completed {len(simulated_means)} simulations"
+    )
+
+```
+
+
+### Compare the border model with observed battles
+
+```{python}
+border_model_summary = []
+
+for decay_distance, simulated_means in border_model_results.items():
+
+    expected_mean = simulated_means.mean()
+
+    border_model_summary.append({
+        "decay_distance_km": decay_distance / 1000,
+        "observed_mean_km": observed_border_mean,
+        "expected_mean_km": expected_mean,
+        "observed_expected_ratio": (
+            observed_border_mean / expected_mean
+        ),
+        "simulation_2.5_percentile": np.percentile(
+            simulated_means, 2.5
+        ),
+        "simulation_97.5_percentile": np.percentile(
+            simulated_means, 97.5
+        ),
+        "simulations_as_extreme": np.sum(
+            simulated_means <= observed_border_mean
+        )
+    })
+
+border_model_summary_df = pd.DataFrame(border_model_summary)
+
+display(border_model_summary_df)
+
+```
+
+
+### Visualize the competing distributions
+
+```{python}
+fig, ax = plt.subplots(figsize=(12, 6))
+
+for decay_distance, simulated_means in border_model_results.items():
+
+    ax.hist(
+        simulated_means,
+        bins=30,
+        alpha=0.35,
+        label=f"{decay_distance / 1000:.0f} km decay"
+    )
+
+ax.axvline(
+    observed_border_mean,
+    color="#C8102E",
+    linestyle="--",
+    linewidth=2.5,
+    label=f"Observed: {observed_border_mean:.1f} km"
+)
+
+ax.set_title("Border-Based Simulations vs. Observed Battle Locations")
+ax.set_xlabel("Mean distance to historical territorial perimeter (km)")
+ax.set_ylabel("Number of simulations")
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Border Method Broken out by Period
+
+### Simulations Broke out by Period
+```{python}
+# Simulation settings
+n_border_simulations = 999
+border_rng = np.random.default_rng(5302)
+
+# Store simulated mean distances for each period and decay scale
+border_model_results = {}
+
+for period, n_battles in observed_battle_counts.items():
+
+    if n_battles == 0:
+        continue
+
+    print(f"\nRunning simulations for {period} ({n_battles} battle locations)")
+
+    for decay_distance in decay_distances:
+
+        simulated_means = []
+
+        # Retrieve this period's border-based distribution
+        distribution = border_sampling_distributions[
+            (period, decay_distance)
+        ]
+
+        for simulation in range(n_border_simulations):
+
+            # Generate simulated locations
+            simulated_coordinates = simulate_border_points(
+                n=n_battles,
+                grid_coordinates=distribution["coordinates"],
+                probabilities=distribution["probabilities"],
+                grid_resolution=grid_resolution,
+                study_area=study_area_geometry,
+                rng=border_rng
+            )
+
+            # Convert simulated coordinates to spatial points
+            simulated_points = gpd.GeoSeries(
+                gpd.points_from_xy(
+                    simulated_coordinates[:, 0],
+                    simulated_coordinates[:, 1]
+                ),
+                crs=metric_crs
+            )
+
+            # Measure distance to this period's perimeter
+            distances = (
+                simulated_points.distance(
+                    boundary_perimeters[period]
+                ) / 1000
+            )
+
+            # Store this simulation's mean distance
+            simulated_means.append(distances.mean())
+
+        # Store results by period and decay scale
+        border_model_results[
+            (period, decay_distance)
+        ] = np.array(simulated_means)
+
+        print(
+            f"  {decay_distance / 1000:.0f} km decay: "
+            f"completed {len(simulated_means)} simulations"
+        )
+
+```
+
+### Compare each period with its observed battles
+
+```{python}
+# Calculate observed mean border distance for each period
+observed_border_means = (
+    battle_border_gdf.groupby("boundary_period")["border_distance_km"]
+    .mean()
+    .reindex(boundary_years.keys())
+)
+
+# Compare observed and simulated distances
+border_model_summary = []
+
+for period in boundary_years:
+
+    n_battles = observed_battle_counts[period]
+    observed_mean = observed_border_means[period]
+
+    if n_battles == 0:
+        continue
+
+    for decay_distance in decay_distances:
+
+        simulated_means = border_model_results[
+            (period, decay_distance)
+        ]
+
+        expected_mean = simulated_means.mean()
+
+        # Count simulations on either side of the observed mean
+        simulations_below = np.sum(
+            simulated_means <= observed_mean
+        )
+
+        simulations_above = np.sum(
+            simulated_means >= observed_mean
+        )
+
+        border_model_summary.append({
+            "boundary_period": period,
+            "boundary_year": boundary_years[period],
+            "battle_locations": n_battles,
+            "decay_distance_km": decay_distance / 1000,
+            "observed_mean_km": observed_mean,
+            "expected_mean_km": expected_mean,
+            "observed_expected_ratio": (
+                observed_mean / expected_mean
+            ),
+            "simulation_2.5_percentile": np.percentile(
+                simulated_means, 2.5
+            ),
+            "simulation_97.5_percentile": np.percentile(
+                simulated_means, 97.5
+            ),
+            "simulations_below_observed": simulations_below,
+            "simulations_above_observed": simulations_above,
+            "lower_tail_p_value": (
+                simulations_below + 1
+            ) / (n_border_simulations + 1),
+            "upper_tail_p_value": (
+                simulations_above + 1
+            ) / (n_border_simulations + 1)
+        })
+
+border_model_summary_df = pd.DataFrame(border_model_summary)
+
+display(border_model_summary_df)
+
+```
+
+### Visualize the results for all nine periods
+
+```{python}
+fig, axes = plt.subplots(
+    3, 3,
+    figsize=(18, 14),
+    sharex=False,
+    sharey=False
+)
+
+axes = axes.flatten()
+
+for i, period in enumerate(boundary_years):
+
+    ax = axes[i]
+
+    # Observed mean for this period
+    observed_mean = observed_border_means[period]
+
+    # Plot each decay-scale simulation distribution
+    for decay_distance in decay_distances:
+
+        simulated_means = border_model_results[
+            (period, decay_distance)
+        ]
+
+        ax.hist(
+            simulated_means,
+            bins=25,
+            alpha=0.35,
+            label=f"{decay_distance / 1000:.0f} km decay"
+        )
+
+    # Add observed mean
+    ax.axvline(
+        observed_mean,
+        color="#C8102E",
+        linestyle="--",
+        linewidth=2.5,
+        label=f"Observed: {observed_mean:.1f} km"
+    )
+
+    # Period title and formatting
+    ax.set_title(
+        f"{period} ({observed_battle_counts[period]} locations)"
+    )
+
+    ax.set_xlabel("Mean distance to border (km)")
+    ax.set_ylabel("Number of simulations")
+
+    ax.spines[["top", "right"]].set_visible(False)
+
+    if i == 0:
+        ax.legend(fontsize=8)
+
+fig.suptitle(
+    "Border-Based Simulations by Historical Period",
+    fontsize=16,
+    y=1.02
+)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+#### Quick Notes for later
+
+- 264 BC: Battles are substantially farther from the border than even the 200 km model predicts. However, the upper-tail p-value is 0.110, so the observed mean is still within the 95% simulation interval.
+- 133 BC: The 200 km model predicts battles farther from the border than observed. The observed mean is unusually close relative to this model (lower-tail p = 0.040).
+- 60 BC: The observed mean is somewhat farther away than the 200 km model predicts, but the evidence is borderline (upper-tail p = 0.059).
+- 69 AD: This is the most interesting contrast. Battles are considerably closer to the border than the 200 km model predicts (lower-tail p = 0.005).
+- 314 AD: The observed mean is relatively close to the 200 km model's prediction.
+The 14 AD and 117 AD results are particularly uncertain because they have only six and three battle-location records, respectively.
+
+
+# External Battles Vs Civil Conflicts
+
+## Define the three classification groups
+```{python}
+# Define the three groups to compare
+classification_groups = {
+    "All Battles": battle_border_gdf.copy(),
+    "External": battle_border_gdf[
+        battle_border_gdf["classification"] == "External"
+    ].copy(),
+    "Civil Conflict": battle_border_gdf[
+        battle_border_gdf["classification"] == "Civil Conflict"
+    ].copy()
+}
+
+# Check the number of records and unique battles in each group
+classification_summary = []
+
+for group_name, group_data in classification_groups.items():
+
+    classification_summary.append({
+        "classification": group_name,
+        "battle_location_records": len(group_data),
+        "unique_battles": group_data["battle_wikidata_id"].nunique()
+    })
+
+classification_summary_df = pd.DataFrame(classification_summary)
+
+display(classification_summary_df)
+
+```
+
+### Calculate observed battle counts and distances by period
+
+```{python}
+# Store observed counts and mean border distances by classification
+observed_group_counts = {}
+observed_group_means = {}
+
+for group_name, group_data in classification_groups.items():
+
+    # Count battle-location records in each period
+    observed_group_counts[group_name] = (
+        group_data.groupby("boundary_period")
+        .size()
+        .reindex(boundary_years.keys(), fill_value=0)
+    )
+
+    # Calculate observed mean border distance in each period
+    observed_group_means[group_name] = (
+        group_data.groupby("boundary_period")["border_distance_km"]
+        .mean()
+        .reindex(boundary_years.keys())
+    )
+
+# Display period counts for all three groups
+period_classification_counts = pd.DataFrame(
+    observed_group_counts
+)
+
+display(period_classification_counts)
+
+```
+
+### Run the classification-specific border simulations
+
+```{python}
+# Simulation settings
+n_border_simulations = 999
+border_rng = np.random.default_rng(5303)
+
+# Store simulated mean distances
+classification_border_results = {}
+
+for group_name, group_data in classification_groups.items():
+
+    print(f"\nRunning simulations for: {group_name}")
+
+    for period in boundary_years:
+
+        n_battles = observed_group_counts[group_name][period]
+
+        # Skip periods without observations in this group
+        if n_battles == 0:
+            continue
+
+        for decay_distance in decay_distances:
+
+            simulated_means = []
+
+            # Retrieve this period's border-based distribution
+            distribution = border_sampling_distributions[
+                (period, decay_distance)
+            ]
+
+            for simulation in range(n_border_simulations):
+
+                # Generate simulated battle locations
+                simulated_coordinates = simulate_border_points(
+                    n=n_battles,
+                    grid_coordinates=distribution["coordinates"],
+                    probabilities=distribution["probabilities"],
+                    grid_resolution=grid_resolution,
+                    study_area=study_area_geometry,
+                    rng=border_rng
+                )
+
+                # Convert coordinates to spatial points
+                simulated_points = gpd.GeoSeries(
+                    gpd.points_from_xy(
+                        simulated_coordinates[:, 0],
+                        simulated_coordinates[:, 1]
+                    ),
+                    crs=metric_crs
+                )
+
+                # Measure distances to this period's territorial perimeter
+                distances = (
+                    simulated_points.distance(
+                        boundary_perimeters[period]
+                    ) / 1000
+                )
+
+                simulated_means.append(distances.mean())
+
+            # Store the simulation results
+            classification_border_results[
+                (group_name, period, decay_distance)
+            ] = np.array(simulated_means)
+
+            print(
+                f"  {period}, "
+                f"{decay_distance / 1000:.0f} km decay: "
+                f"{len(simulated_means)} simulations"
+            )
+
+```
+
+### Compare observed and simulated distance
+
+```{python}
+classification_border_summary = []
+
+for group_name in classification_groups:
+
+    for period in boundary_years:
+
+        n_battles = observed_group_counts[group_name][period]
+
+        # Skip periods without observations
+        if n_battles == 0:
+            continue
+
+        observed_mean = observed_group_means[group_name][period]
+
+        for decay_distance in decay_distances:
+
+            simulated_means = classification_border_results[
+                (group_name, period, decay_distance)
+            ]
+
+            expected_mean = simulated_means.mean()
+
+            # Count simulations on either side of the observed mean
+            simulations_below = np.sum(
+                simulated_means <= observed_mean
+            )
+
+            simulations_above = np.sum(
+                simulated_means >= observed_mean
+            )
+
+            classification_border_summary.append({
+                "classification": group_name,
+                "boundary_period": period,
+                "boundary_year": boundary_years[period],
+                "battle_locations": n_battles,
+                "decay_distance_km": decay_distance / 1000,
+                "observed_mean_km": observed_mean,
+                "expected_mean_km": expected_mean,
+                "observed_expected_ratio": (
+                    observed_mean / expected_mean
+                ),
+                "simulation_2.5_percentile": np.percentile(
+                    simulated_means, 2.5
+                ),
+                "simulation_97.5_percentile": np.percentile(
+                    simulated_means, 97.5
+                ),
+                "simulations_below_observed": simulations_below,
+                "simulations_above_observed": simulations_above,
+                "lower_tail_p_value": (
+                    simulations_below + 1
+                ) / (n_border_simulations + 1),
+                "upper_tail_p_value": (
+                    simulations_above + 1
+                ) / (n_border_simulations + 1)
+            })
+
+classification_border_summary_df = pd.DataFrame(
+    classification_border_summary
+)
+
+display(classification_border_summary_df)
+
+```
+
+
+### Visualize the results by classification and period
+
+```{python}
+for group_name in classification_groups:
+
+    fig, axes = plt.subplots(
+        3, 3,
+        figsize=(18, 14),
+        sharex=False,
+        sharey=False
+    )
+
+    axes = axes.flatten()
+
+    for i, period in enumerate(boundary_years):
+
+        ax = axes[i]
+
+        n_battles = observed_group_counts[group_name][period]
+
+        if n_battles == 0:
+            ax.set_title(f"{period} (No observations)")
+            ax.axis("off")
+            continue
+
+        observed_mean = observed_group_means[group_name][period]
+
+        # Plot each decay-scale simulation distribution
+        for decay_distance in decay_distances:
+
+            simulated_means = classification_border_results[
+                (group_name, period, decay_distance)
+            ]
+
+            ax.hist(
+                simulated_means,
+                bins=25,
+                alpha=0.35,
+                label=f"{decay_distance / 1000:.0f} km decay"
+            )
+
+        # Add observed mean
+        ax.axvline(
+            observed_mean,
+            color="#C8102E",
+            linestyle="--",
+            linewidth=2.5,
+            label=f"Observed: {observed_mean:.1f} km"
+        )
+
+        ax.set_title(
+            f"{period} ({n_battles} locations)"
+        )
+
+        ax.set_xlabel("Mean distance to border (km)")
+        ax.set_ylabel("Number of simulations")
+
+        ax.spines[["top", "right"]].set_visible(False)
+
+        if i == 0:
+            ax.legend(fontsize=8)
+
+    fig.suptitle(
+        f"Border-Based Simulations: {group_name}",
+        fontsize=16,
+        y=1.02
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+```
+
+
+### Comparison
+
+```{python}
+border_category_ratios = classification_border_summary_df.pivot_table(
+    index=["boundary_period", "boundary_year"],
+    columns=["classification", "decay_distance_km"],
+    values="observed_expected_ratio"
+)
+
+display(border_category_ratios.round(2))
+```
+
+#### Descriptive
+
+```{python}
+border_category_summary = (
+    classification_border_summary_df
+    .groupby(["classification", "decay_distance_km"])
+    .agg(
+        total_battle_locations=("battle_locations", "sum"),
+        mean_observed_distance=("observed_mean_km", "mean"),
+        mean_expected_distance=("expected_mean_km", "mean"),
+        mean_ratio=("observed_expected_ratio", "mean")
+    )
+    .reset_index()
+)
+
+display(border_category_summary.round(2))
+
+```
+
+
+#### calculate properly pooled category results
+
+```{python}
+pooled_category_summary_df = (
+    classification_border_summary_df
+    .groupby(["classification", "decay_distance_km"])
+    .apply(
+        lambda group: pd.Series({
+            "battle_locations": group["battle_locations"].sum(),
+
+            "observed_mean_km": np.average(
+                group["observed_mean_km"],
+                weights=group["battle_locations"]
+            ),
+
+            "expected_mean_km": np.average(
+                group["expected_mean_km"],
+                weights=group["battle_locations"]
+            )
+        }),
+        include_groups=False
+    )
+    .reset_index()
+)
+
+pooled_category_summary_df["observed_expected_ratio"] = (
+    pooled_category_summary_df["observed_mean_km"]
+    / pooled_category_summary_df["expected_mean_km"]
+)
+
+display(pooled_category_summary_df.round(2))
+
+```
+
+
+# Settlement Attributes
+
+## Inspect all settlement feature types
+```{python}
+feature_type_summary = (
+    settlements_filtered
+    .assign(
+        feature_type=settlements_filtered["FEATURETYP"]
+        .fillna("(Missing)")
+        .astype(str)
+        .str.strip()
+    )
+    .groupby("feature_type")
+    .agg(
+        settlement_records=("TITLE", "size"),
+        unique_settlements=("TITLE", "nunique")
+    )
+    .reset_index()
+    .sort_values("settlement_records", ascending=False)
+)
+
+feature_type_summary["percentage"] = (
+    feature_type_summary["settlement_records"]
+    / feature_type_summary["settlement_records"].sum()
+    * 100
+)
+
+display(feature_type_summary.round(2))
+
+```
+
+### Visualize the feature-type distribution
+```{python}
+fig, ax = plt.subplots(figsize=(12, 7))
+
+plot_data = feature_type_summary[
+    feature_type_summary["feature_type"] != "(Missing)"
+].sort_values("settlement_records")
+
+ax.barh(
+    plot_data["feature_type"],
+    plot_data["settlement_records"]
+)
+
+ax.set_title("Pleiades Settlement Records by Feature Type")
+ax.set_xlabel("Number of settlement records")
+ax.set_ylabel("Feature type")
+
+ax.spines["top"].set_visible(False)
+ax.spines["right"].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+### Check
+```{python}
+# Display every feature type and its record count
+display(
+    feature_type_summary[
+        ["feature_type", "settlement_records", "unique_settlements", "percentage"]
+    ].to_string(index=False)
+)
+
+# Inspect examples of the three largest categories
+for feature_type in [
+    "settlement",
+    "settlement, unlabeled",
+    "settlement, feature"
+]:
+    print(f"\n--- {feature_type} ---")
+
+    display(
+        settlements_filtered[
+            settlements_filtered["FEATURETYP"] == feature_type
+        ]
+        .drop(columns="geometry")
+        .head(10)
+    )
+```
+
+### Top 10
+
+```{python}
+# Top 10 settlement feature types by record count
+top_10_features = (
+    feature_type_summary
+    .head(15)
+    .copy()
+)
+
+display(
+    top_10_features[
+        ["feature_type", "settlement_records", "unique_settlements", "percentage"]
+    ].round(2)
+)
+
+```
+
+## Compared to the Settlment Baseline
+
+```{python}
+from scipy.spatial import cKDTree
+from sklearn.neighbors import KernelDensity
+from shapely import contains_xy
+
+# --------------------------------------------------
+# 1. Define the four feature categories
+# --------------------------------------------------
+
+feature_categories = {
+    "Ports": [
+        "settlement, port"
+    ],
+    "Temples": [
+        "settlement, temple"
+    ],
+    "Forts": [
+        "settlement, fort"
+    ],
+    "Entertainment": [
+        "settlement, amphitheatre",
+        "settlement, theatre"
+    ]
+}
+
+# --------------------------------------------------
+# 2. Project settlement locations
+# --------------------------------------------------
+
+settlements_projected = settlements_filtered.to_crs(metric_crs).copy()
+
+# --------------------------------------------------
+# 3. Create a common sampling grid
+# --------------------------------------------------
+
+grid_resolution = 20_000  # 20 km
+bandwidth = 50_000        # 50 km KDE bandwidth
+n_simulations = 999
+
+x_min, y_min, x_max, y_max = study_area_geometry.bounds
+
+x_coordinates = np.arange(
+    x_min + grid_resolution / 2,
+    x_max,
+    grid_resolution
+)
+
+y_coordinates = np.arange(
+    y_min + grid_resolution / 2,
+    y_max,
+    grid_resolution
+)
+
+grid_x, grid_y = np.meshgrid(x_coordinates, y_coordinates)
+
+all_grid_coordinates = np.column_stack([
+    grid_x.ravel(),
+    grid_y.ravel()
+])
+
+# Retain grid cells inside the study area
+inside_study_area = contains_xy(
+    study_area_geometry,
+    all_grid_coordinates[:, 0],
+    all_grid_coordinates[:, 1]
+)
+
+grid_coordinates = all_grid_coordinates[inside_study_area]
+
+# --------------------------------------------------
+# 4. Prepare observed battle groups
+# --------------------------------------------------
+
+battle_groups = {
+    classification: battle_border_gdf[
+        battle_border_gdf["classification"] == classification
+    ].copy()
+    for classification in ["Civil Conflict", "External"]
+}
+
+# --------------------------------------------------
+# 5. Run the Monte Carlo tests
+# --------------------------------------------------
+
+rng = np.random.default_rng(5303)
+
+feature_simulation_results = {}
+feature_simulation_summary = []
+
+for category, feature_types in feature_categories.items():
+
+    print(f"\nTesting: {category}")
+
+    # Extract locations belonging to this feature category
+    feature_subset = settlements_projected[
+        settlements_projected["FEATURETYP"].isin(feature_types)
+    ].copy()
+
+    # Remove missing and empty geometries
+    feature_subset = feature_subset[
+        feature_subset.geometry.notna()
+        & ~feature_subset.geometry.is_empty
+    ]
+
+    feature_coordinates = np.column_stack([
+        feature_subset.geometry.x,
+        feature_subset.geometry.y
+    ])
+
+    # Remove duplicate coordinates
+    feature_coordinates = np.unique(
+        feature_coordinates,
+        axis=0
+    )
+
+    if len(feature_coordinates) == 0:
+        print("No usable feature locations. Skipping.")
+        continue
+
+    # Build nearest-feature lookup
+    feature_tree = cKDTree(feature_coordinates)
+
+    # Exclude the tested feature type from the background
+    # settlement distribution
+    background_settlements = settlements_projected[
+        ~settlements_projected["FEATURETYP"].isin(feature_types)
+    ].copy()
+
+    background_coordinates = np.column_stack([
+        background_settlements.geometry.x,
+        background_settlements.geometry.y
+    ])
+
+    # Fit KDE using the remaining settlement locations
+    kde = KernelDensity(
+        bandwidth=bandwidth,
+        kernel="gaussian"
+    )
+
+    kde.fit(background_coordinates)
+
+    # Calculate sampling probabilities across the study area
+    log_density = kde.score_samples(grid_coordinates)
+
+    sampling_weights = np.exp(
+        log_density - log_density.max()
+    )
+
+    sampling_probabilities = (
+        sampling_weights / sampling_weights.sum()
+    )
+
+    # Store results for each battle classification
+    for classification, battles in battle_groups.items():
+
+        observed_coordinates = np.column_stack([
+            battles.geometry.x,
+            battles.geometry.y
+        ])
+
+        n_battles = len(observed_coordinates)
+
+        if n_battles == 0:
+            continue
+
+        # Observed mean distance to the nearest feature
+        observed_distances = (
+            feature_tree.query(observed_coordinates)[0] / 1000
+        )
+
+        observed_mean = observed_distances.mean()
+
+        # Simulate battle locations using the background
+        # settlement distribution
+        simulated_means = []
+
+        for simulation in range(n_simulations):
+
+            simulated_coordinates = simulate_battle_points(
+                n=n_battles,
+                grid_coordinates=grid_coordinates,
+                probabilities=sampling_probabilities,
+                grid_resolution=grid_resolution,
+                study_area=study_area_geometry,
+                rng=rng
+            )
+
+            simulated_distances = (
+                feature_tree.query(simulated_coordinates)[0] / 1000
+            )
+
+            simulated_means.append(
+                simulated_distances.mean()
+            )
+
+        simulated_means = np.array(simulated_means)
+
+        # Monte Carlo lower-tail test:
+        # Are observed battles unusually close to this feature?
+        p_value = (
+            np.sum(simulated_means <= observed_mean) + 1
+        ) / (n_simulations + 1)
+
+        expected_mean = simulated_means.mean()
+
+        feature_simulation_results[
+            (category, classification)
+        ] = simulated_means
+
+        feature_simulation_summary.append({
+            "feature_category": category,
+            "classification": classification,
+            "battle_locations": n_battles,
+            "feature_locations": len(feature_coordinates),
+            "observed_mean_km": observed_mean,
+            "expected_mean_km": expected_mean,
+            "observed_expected_ratio": observed_mean / expected_mean,
+            "simulation_2.5_percentile": np.percentile(
+                simulated_means, 2.5
+            ),
+            "simulation_97.5_percentile": np.percentile(
+                simulated_means, 97.5
+            ),
+            "lower_tail_p_value": p_value
+        })
+
+        print(
+            f"{classification}: "
+            f"Observed = {observed_mean:.2f} km | "
+            f"Expected = {expected_mean:.2f} km | "
+            f"p = {p_value:.3f}"
+        )
+
+# --------------------------------------------------
+# 6. Display results
+# --------------------------------------------------
+
+feature_simulation_summary_df = pd.DataFrame(
+    feature_simulation_summary
+)
+
+feature_simulation_summary_df = (
+    feature_simulation_summary_df
+    .sort_values([
+        "classification",
+        "lower_tail_p_value"
+    ])
+    .reset_index(drop=True)
+)
+
+display(feature_simulation_summary_df.round(3))
+
+```
+
+
+### Distribution Plots
+```{python}
+# Plot simulated distance distributions by feature type and battle classification
+
+feature_order = [
+    "Ports",
+    "Temples",
+    "Forts",
+    "Entertainment"
+]
+
+classification_order = [
+    "Civil Conflict",
+    "External"
+]
+
+fig, axes = plt.subplots(
+    nrows=2,
+    ncols=4,
+    figsize=(17, 8)
+)
+
+for row, classification in enumerate(classification_order):
+
+    for col, category in enumerate(feature_order):
+
+        ax = axes[row, col]
+
+        # Retrieve simulation results
+        simulated_means = feature_simulation_results[
+            (category, classification)
+        ]
+
+        # Retrieve observed and expected statistics
+        result = feature_simulation_summary_df[
+            (feature_simulation_summary_df["feature_category"] == category)
+            & (feature_simulation_summary_df["classification"] == classification)
+        ].iloc[0]
+
+        observed_mean = result["observed_mean_km"]
+        expected_mean = result["expected_mean_km"]
+        p_value = result["lower_tail_p_value"]
+
+        # Plot simulated distribution
+        ax.hist(
+            simulated_means,
+            bins=30,
+            density=True,
+            color="#A6A6A6",
+            edgecolor="white",
+            alpha=0.85
+        )
+
+        # Observed mean
+        ax.axvline(
+            observed_mean,
+            color="#041E42",
+            linewidth=2,
+            label="Observed mean"
+        )
+
+        # Expected mean
+        ax.axvline(
+            expected_mean,
+            color="#26A69A",
+            linewidth=2,
+            linestyle="--",
+            label="Expected mean"
+        )
+
+        # Titles and labels
+        ax.set_title(category)
+        ax.set_xlabel("Mean distance to nearest feature (km)")
+        ax.set_ylabel("Density")
+
+        ax.text(
+            0.97,
+            0.95,
+            f"p = {p_value:.3f}",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontsize=10
+        )
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    # Label each row
+    axes[row, 0].text(
+        -0.35,
+        0.5,
+        classification,
+        transform=axes[row, 0].transAxes,
+        rotation=90,
+        ha="center",
+        va="center",
+        fontsize=12,
+        fontweight="bold"
+    )
+
+# Shared legend
+handles, labels = axes[0, 0].get_legend_handles_labels()
+
+fig.legend(
+    handles,
+    labels,
+    loc="upper center",
+    ncol=2,
+    frameon=False,
+    bbox_to_anchor=(0.5, 1.02)
+)
+
+fig.suptitle(
+    "Battle Proximity to Specialized Settlement Features",
+    fontsize=15,
+    y=1.08
+)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+
+# Fort and Entertainment Based Simulation Model
+
+## Set up the observed battle dataset
+```{python}
+from scipy.spatial import cKDTree
+from sklearn.neighbors import KernelDensity
+from shapely import contains_xy
+
+# Create one representative point per unique battle
+battle_records = []
+
+for battle_id, group in battle_border_gdf.groupby("battle_wikidata_id"):
+
+    classifications = group["classification"].dropna().unique()
+
+    if len(classifications) != 1:
+        raise ValueError(
+            f"Battle {battle_id} has inconsistent classifications."
+        )
+
+    representative_point = group.geometry.union_all().centroid
+
+    battle_records.append({
+        "battle_wikidata_id": battle_id,
+        "battle_name": group["battle_name"].iloc[0],
+        "classification": classifications[0],
+        "location_records": len(group),
+        "geometry": representative_point
+    })
+
+battles_unique_gdf = gpd.GeoDataFrame(
+    battle_records,
+    geometry="geometry",
+    crs=metric_crs
+)
+
+# Separate the observed battle categories
+observed_external = battles_unique_gdf[
+    battles_unique_gdf["classification"] == "External"
+].copy()
+
+observed_civil = battles_unique_gdf[
+    battles_unique_gdf["classification"] == "Civil Conflict"
+].copy()
+
+# Extract coordinates
+observed_external_coords = np.column_stack([
+    observed_external.geometry.x,
+    observed_external.geometry.y
+])
+
+observed_civil_coords = np.column_stack([
+    observed_civil.geometry.x,
+    observed_civil.geometry.y
+])
+
+observed_all_coords = np.vstack([
+    observed_external_coords,
+    observed_civil_coords
+])
+
+print("UNIQUE BATTLE COUNTS")
+print(f"External conflicts: {len(observed_external)}")
+print(f"Civil conflicts: {len(observed_civil)}")
+print(f"All conflicts: {len(battles_unique_gdf)}")
+
+print("\nBATTLES WITH MULTIPLE LOCATION RECORDS")
+print(
+    (battles_unique_gdf["location_records"] > 1).sum()
+)
+
+```
+
+
+## Create the shared sampling grid
+
+```{python}
+# Simulation settings
+grid_resolution = 20_000
+kde_bandwidth = 50_000
+n_simulations = 999
+
+# Create grid cell centers
+minx, miny, maxx, maxy = study_area_geometry.bounds
+
+x_centers = np.arange(
+    minx + grid_resolution / 2,
+    maxx,
+    grid_resolution
+)
+
+y_centers = np.arange(
+    miny + grid_resolution / 2,
+    maxy,
+    grid_resolution
+)
+
+xx, yy = np.meshgrid(x_centers, y_centers)
+
+grid_coordinates = np.column_stack([
+    xx.ravel(),
+    yy.ravel()
+])
+
+# Retain grid centers inside the study area
+inside_study_area = contains_xy(
+    study_area_geometry,
+    grid_coordinates[:, 0],
+    grid_coordinates[:, 1]
+)
+
+grid_coordinates = grid_coordinates[inside_study_area]
+
+print(f"Eligible grid cells: {len(grid_coordinates):,}")
+
+```
+
+## Build General Settlment model
+
+```{python}
+# Project all filtered settlements
+settlements_projected = settlements_filtered.to_crs(metric_crs)
+
+settlement_coordinates = np.column_stack([
+    settlements_projected.geometry.x,
+    settlements_projected.geometry.y
+])
+
+# Fit the general settlement KDE
+settlement_kde = KernelDensity(
+    bandwidth=kde_bandwidth,
+    kernel="gaussian"
+)
+
+settlement_kde.fit(settlement_coordinates)
+
+# Evaluate settlement intensity at grid cell centers
+settlement_log_density = settlement_kde.score_samples(
+    grid_coordinates
+)
+
+settlement_weights = np.exp(
+    settlement_log_density - settlement_log_density.max()
+)
+
+settlement_probabilities = (
+    settlement_weights / settlement_weights.sum()
+)
+
+print(
+    "Settlement probabilities sum to:",
+    settlement_probabilities.sum()
+)
+
+```
+
+
+## Build the two-part infrastructure model
+
+```{python}
+# Identify feature types
+feature_types = (
+    settlements_projected["FEATURETYP"]
+    .fillna("")
+    .astype(str)
+)
+
+fort_mask = feature_types.str.contains(
+    r"\bfort\b",
+    case=False,
+    regex=True
+)
+
+entertainment_mask = feature_types.str.contains(
+    r"\b(?:amphitheatre|amphitheater|theatre|theater)\b",
+    case=False,
+    regex=True
+)
+
+# Extract feature coordinates
+fort_coordinates = np.column_stack([
+    settlements_projected.loc[fort_mask].geometry.x,
+    settlements_projected.loc[fort_mask].geometry.y
+])
+
+entertainment_coordinates = np.column_stack([
+    settlements_projected.loc[entertainment_mask].geometry.x,
+    settlements_projected.loc[entertainment_mask].geometry.y
+])
+
+# Remove duplicate coordinates
+fort_coordinates = np.unique(fort_coordinates, axis=0)
+
+entertainment_coordinates = np.unique(
+    entertainment_coordinates,
+    axis=0
+)
+
+print(f"Unique fort locations: {len(fort_coordinates)}")
+print(
+    f"Unique entertainment locations: "
+    f"{len(entertainment_coordinates)}"
+)
+
+```
+
+
+### Build nearest-feature spatial indexes
+
+```{python}
+# Build nearest-feature spatial indexes
+fort_tree = cKDTree(fort_coordinates)
+
+entertainment_tree = cKDTree(entertainment_coordinates)
+
+# Calculate distance from each grid cell to nearest feature
+fort_distances = fort_tree.query(
+    grid_coordinates,
+    k=1
+)[0]
+
+entertainment_distances = entertainment_tree.query(
+    grid_coordinates,
+    k=1
+)[0]
+
+# Distance-decay values
+decay_distances = [
+    25_000,
+    50_000,
+    100_000,
+    200_000
+]
+
+# Create probability distributions for each decay value
+infrastructure_probabilities = {}
+
+for decay_distance in decay_distances:
+
+    # External conflicts: fort-based probabilities
+    fort_weights = np.exp(
+        -(fort_distances - fort_distances.min())
+        / decay_distance
+    )
+
+    fort_probabilities = (
+        fort_weights / fort_weights.sum()
+    )
+
+    # Civil conflicts: entertainment-based probabilities
+    entertainment_weights = np.exp(
+        -(entertainment_distances - entertainment_distances.min())
+        / decay_distance
+    )
+
+    entertainment_probabilities = (
+        entertainment_weights / entertainment_weights.sum()
+    )
+
+    infrastructure_probabilities[decay_distance] = {
+        "external": fort_probabilities,
+        "civil": entertainment_probabilities
+    }
+
+print("Infrastructure distributions created.")
+
+for decay_distance, distributions in infrastructure_probabilities.items():
+    print(
+        f"{decay_distance / 1000:.0f} km | "
+        f"Fort probabilities: "
+        f"{distributions['external'].sum():.3f} | "
+        f"Entertainment probabilities: "
+        f"{distributions['civil'].sum():.3f}"
+    )
+
+```
+
+
+## Create the battle simulation function
+
+```{python}
+def simulate_battle_points(
+    n,
+    probabilities,
+    rng
+):
+
+    simulated_coordinates = []
+
+    while len(simulated_coordinates) < n:
+
+        remaining = n - len(simulated_coordinates)
+
+        batch_size = max(remaining * 2, 100)
+
+        # Sample grid cells
+        sampled_indices = rng.choice(
+            len(grid_coordinates),
+            size=batch_size,
+            replace=True,
+            p=probabilities
+        )
+
+        candidate_coordinates = grid_coordinates[
+            sampled_indices
+        ].copy()
+
+        # Randomly jitter within grid cells
+        candidate_coordinates += rng.uniform(
+            -grid_resolution / 2,
+            grid_resolution / 2,
+            size=(batch_size, 2)
+        )
+
+        # Reject locations outside the study area
+        valid = contains_xy(
+            study_area_geometry,
+            candidate_coordinates[:, 0],
+            candidate_coordinates[:, 1]
+        )
+
+        valid_coordinates = candidate_coordinates[valid]
+
+        simulated_coordinates.extend(
+            valid_coordinates[:remaining].tolist()
+        )
+
+    return np.asarray(simulated_coordinates)
+
+```
+
+### Calculate mean nearest-neighbor distance
+
+```{python}
+def mean_nearest_neighbor_distance(coordinates):
+
+    if len(coordinates) < 2:
+        return np.nan
+
+    nearest_distances = cKDTree(coordinates).query(
+        coordinates,
+        k=2
+    )[0][:, 1]
+
+    return nearest_distances.mean() / 1000
+
+```
+
+### Calculate Observed Statistic
+
+```{python}
+observed_statistics = {
+    "External": mean_nearest_neighbor_distance(
+        observed_external_coords
+    ),
+
+    "Civil Conflict": mean_nearest_neighbor_distance(
+        observed_civil_coords
+    ),
+
+    "All Battles": mean_nearest_neighbor_distance(
+        observed_all_coords
+    )
+}
+
+print("OBSERVED MEAN NEAREST-NEIGHBOR DISTANCES")
+
+for category, value in observed_statistics.items():
+    print(f"{category}: {value:.2f} km")
+
+
+```
+
+## Run the Monte Carlo simulations
+
+```{python}
+def run_battle_model(
+    external_probabilities,
+    civil_probabilities,
+    n_simulations=999,
+    seed=5300
+):
+
+    rng = np.random.default_rng(seed)
+
+    results = {
+        "External": [],
+        "Civil Conflict": [],
+        "All Battles": []
+    }
+
+    for simulation in range(n_simulations):
+
+        # Simulate external conflicts
+        simulated_external = simulate_battle_points(
+            len(observed_external_coords),
+            external_probabilities,
+            rng
+        )
+
+        # Simulate civil conflicts
+        simulated_civil = simulate_battle_points(
+            len(observed_civil_coords),
+            civil_probabilities,
+            rng
+        )
+
+        # Combine both classifications
+        simulated_all = np.vstack([
+            simulated_external,
+            simulated_civil
+        ])
+
+        # Calculate the three test statistics
+        results["External"].append(
+            mean_nearest_neighbor_distance(
+                simulated_external
+            )
+        )
+
+        results["Civil Conflict"].append(
+            mean_nearest_neighbor_distance(
+                simulated_civil
+            )
+        )
+
+        results["All Battles"].append(
+            mean_nearest_neighbor_distance(
+                simulated_all
+            )
+        )
+
+    return {
+        category: np.asarray(values)
+        for category, values in results.items()
+    }
+
+
+```
+
+### Run the General Settlement Model
+
+
+```{python}
+settlement_model_results = run_battle_model(
+    external_probabilities=settlement_probabilities,
+    civil_probabilities=settlement_probabilities,
+    n_simulations=n_simulations,
+    seed=5300
+)
+
+print("Settlement model simulations complete.")
+
+```
+
+
+### Run the infrastructure model
+
+```{python}
+infrastructure_model_results = {}
+
+for i, decay_distance in enumerate(decay_distances):
+
+    probabilities = infrastructure_probabilities[
+        decay_distance
+    ]
+
+    infrastructure_model_results[decay_distance] = (
+        run_battle_model(
+            external_probabilities=probabilities["external"],
+            civil_probabilities=probabilities["civil"],
+            n_simulations=n_simulations,
+            seed=5400 + i
+        )
+    )
+
+    print(
+        f"Completed infrastructure model: "
+        f"{decay_distance / 1000:.0f} km"
+    )
+
+```
+
+## Summarize and compare model performance
+
+```{python}
+def summarize_simulations(
+    model_name,
+    simulation_results
+):
+
+    summary_rows = []
+
+    for category, simulations in simulation_results.items():
+
+        observed = observed_statistics[category]
+
+        expected = simulations.mean()
+
+        lower_p = (
+            np.sum(simulations <= observed) + 1
+        ) / (len(simulations) + 1)
+
+        upper_p = (
+            np.sum(simulations >= observed) + 1
+        ) / (len(simulations) + 1)
+
+        two_sided_p = min(
+            1.0,
+            2 * min(lower_p, upper_p)
+        )
+
+        summary_rows.append({
+            "model": model_name,
+            "classification": category,
+            "observed_km": observed,
+            "expected_km": expected,
+            "observed_expected_ratio": observed / expected,
+            "simulation_2.5_percentile": np.percentile(
+                simulations, 2.5
+            ),
+            "simulation_97.5_percentile": np.percentile(
+                simulations, 97.5
+            ),
+            "two_sided_p_value": two_sided_p
+        })
+
+    return summary_rows
+
+
+# Collect settlement model results
+all_summary_rows = summarize_simulations(
+    "Settlement",
+    settlement_model_results
+)
+
+# Collect infrastructure model results
+for decay_distance, results in infrastructure_model_results.items():
+
+    model_name = (
+        f"Infrastructure {decay_distance // 1000} km"
+    )
+
+    all_summary_rows.extend(
+        summarize_simulations(
+            model_name,
+            results
+        )
+    )
+
+# Create comparison table
+model_comparison_df = pd.DataFrame(
+    all_summary_rows
+)
+
+model_comparison_df = model_comparison_df.sort_values(
+    ["classification", "model"]
+).reset_index(drop=True)
+
+model_comparison_df.round(3)
+
+```
+
+
+### Visualize the simulation distributions
+
+```{python}
+model_distributions = {
+    "Settlement": settlement_model_results
+}
+
+for decay_distance, results in infrastructure_model_results.items():
+
+    model_distributions[
+        f"Infrastructure {decay_distance // 1000} km"
+    ] = results
+
+
+categories = [
+    "External",
+    "Civil Conflict",
+    "All Battles"
+]
+
+fig, axes = plt.subplots(
+    3,
+    1,
+    figsize=(12, 13)
+)
+
+for ax, category in zip(axes, categories):
+
+    observed = observed_statistics[category]
+
+    for model_name, results in model_distributions.items():
+
+        simulations = results[category]
+
+        ax.hist(
+            simulations,
+            bins=30,
+            alpha=0.35,
+            label=model_name
+        )
+
+    ax.axvline(
+        observed,
+        color="#041E42",
+        linestyle="--",
+        linewidth=2,
+        label="Observed"
+    )
+
+    ax.set_title(
+        f"{category}: Mean Nearest-Neighbor Distance"
+    )
+
+    ax.set_xlabel("Mean nearest-neighbor distance (km)")
+    ax.set_ylabel("Simulation count")
+    ax.legend()
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Plotting
+
+### Select representative simulations
+
+```{python}
+# Select the 25 km infrastructure model
+results_25km = infrastructure_model_results[25_000]
+
+# Find the simulation closest to the median for each classification
+representative_simulations = {}
+
+for classification in [
+    "External",
+    "Civil Conflict",
+    "All Battles"
+]:
+
+    simulations = results_25km[classification]
+
+    median_statistic = np.median(simulations)
+
+    representative_index = np.argmin(
+        np.abs(simulations - median_statistic)
+    )
+
+    representative_simulations[classification] = (
+        representative_index
+    )
+
+    print(
+        f"{classification}: "
+        f"simulation {representative_index + 1}, "
+        f"NN distance = "
+        f"{simulations[representative_index]:.2f} km"
+    )
+
+```
+
+
+### Recreate the representative simulated locations
+
+```{python}
+
+
+```

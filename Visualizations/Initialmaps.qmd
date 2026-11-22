@@ -1,0 +1,1302 @@
+---
+title: "Maps of the Roman Empire"
+subtitle: "Battles, Settlements, and Territorial Boundaries"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+jupyter: python3
+---
+
+
+# Set Up
+```{python}
+from pathlib import Path
+
+import pandas as pd
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Current working directory
+project_dir = Path.cwd()
+
+# Move up one directory to Final Project
+project_root = project_dir.parent
+
+# Data directory
+data_dir = project_root / "Datacollection"
+
+# Define data folders
+boundary_dir = data_dir / "roman_boundaries"
+settlement_dir = data_dir / "roman_cities"
+
+print("Working directory:", project_dir)
+print("Project root:", project_root)
+print("Data directory:", data_dir)
+
+# Load settlement data
+settlements_gdf = gpd.read_file(
+    settlement_dir / "pleiades_settlements.geojson"
+)
+
+# Load battle-location links
+battle_locations_df = pd.read_csv(
+    data_dir / "roman_battle_location_links.csv"
+)
+
+print("Battle-location records:", len(battle_locations_df))
+print(battle_locations_df.columns.tolist())
+
+
+
+```
+
+
+# Battles
+
+## Set Up
+```{python}
+# Convert location coordinates to numeric values
+battle_locations_df["location_latitude"] = pd.to_numeric(
+    battle_locations_df["location_latitude"],
+    errors="coerce"
+)
+
+battle_locations_df["location_longitude"] = pd.to_numeric(
+    battle_locations_df["location_longitude"],
+    errors="coerce"
+)
+
+# Remove records without valid coordinates
+battle_locations_mapped = battle_locations_df.dropna(
+    subset=["location_latitude", "location_longitude"]
+).copy()
+
+# Create GeoDataFrame
+battle_locations_gdf = gpd.GeoDataFrame(
+    battle_locations_mapped,
+    geometry=gpd.points_from_xy(
+        battle_locations_mapped["location_longitude"],
+        battle_locations_mapped["location_latitude"]
+    ),
+    crs="EPSG:4326"
+)
+
+print("Total battle-location records:", len(battle_locations_df))
+print("Records with coordinates:", len(battle_locations_gdf))
+print("Unique battles mapped:", battle_locations_gdf["battle_wikidata_id"].nunique())
+
+
+```
+
+## Mapped
+
+```{python}
+# Plot battle-associated locations
+fig, ax = plt.subplots(figsize=(14, 9))
+
+battle_locations_gdf.plot(
+    ax=ax,
+    color="#B23A48",
+    markersize=8,
+    alpha=0.5
+)
+
+ax.set_title(
+    "Locations Associated with Roman Battles (300 BC–500 AD)",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.grid(alpha=0.2)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Locations
+
+```{python}
+# Keep one record per unique Wikidata location
+unique_locations_gdf = battle_locations_gdf.drop_duplicates(
+    subset=["location_wikidata_id"]
+).copy()
+
+print("Unique locations with coordinates:", len(unique_locations_gdf))
+
+```
+
+
+## Unique Locations Mapped
+
+```{python}
+# Plot unique battle-associated locations
+fig, ax = plt.subplots(figsize=(14, 9))
+
+unique_locations_gdf.plot(
+    ax=ax,
+    color="#2878A5",
+    markersize=8,
+    alpha=0.5
+)
+
+ax.set_title(
+    "Unique Locations Associated with Roman Battles (300 BC–500 AD)",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.grid(alpha=0.2)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+
+# Settlements
+
+## Set Up
+
+```{python}
+# Check the settlement coordinate reference system
+print("Original CRS:", settlements_gdf.crs)
+
+# Convert to WGS84 if necessary
+if settlements_gdf.crs is not None:
+    settlements_gdf = settlements_gdf.to_crs("EPSG:4326")
+
+# Keep valid, non-empty point geometries
+settlements_gdf = settlements_gdf[
+    settlements_gdf.geometry.notna()
+    & settlements_gdf.geometry.geom_type.eq("Point")
+    & settlements_gdf.geometry.is_valid
+    & ~settlements_gdf.geometry.is_empty
+].copy()
+
+print("Settlement records mapped:", len(settlements_gdf))
+print("Geometry types:")
+print(settlements_gdf.geometry.geom_type.value_counts())
+
+```
+
+## Mapped
+
+```{python}
+# Plot ancient settlements
+fig, ax = plt.subplots(figsize=(14, 9))
+
+settlements_gdf.plot(
+    ax=ax,
+    color="#2878A5",
+    markersize=3,
+    alpha=0.5
+)
+
+ax.set_title(
+    "Ancient Settlements in the Pleiades Dataset",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.grid(alpha=0.2)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+
+## Date Testing
+
+```{python}
+# Inspect all available settlement attributes
+print(settlements_gdf.columns.tolist())
+
+# Display a sample of settlement records
+settlements_gdf.drop(columns="geometry").head()
+
+```
+
+```{python}
+# Display chronological attributes for a sample of settlements
+settlements_gdf[
+    [
+        "ID",
+        "GEOCONTEXT",
+        "TIMEPERIOD",
+        "TIMEPER_01",
+        "TIMEPER_02",
+        "MINDATE",
+        "MAXDATE"
+    ]
+].head(20)
+```
+
+
+# Roman Boundaries
+
+## Set Up
+
+```{python}
+# Find all boundary GeoJSON files
+boundary_files = sorted(boundary_dir.glob("*.geojson"))
+
+print("Boundary files found:", len(boundary_files))
+
+# Load each boundary into a dictionary
+boundaries = {}
+
+for boundary_file in boundary_files:
+
+    # Use filename as the dictionary key
+    boundary_name = boundary_file.stem
+
+    # Read GeoJSON
+    boundary_gdf = gpd.read_file(boundary_file)
+
+    # Store in dictionary
+    boundaries[boundary_name] = boundary_gdf
+
+    print(
+        boundary_name,
+        "| Records:", len(boundary_gdf),
+        "| CRS:", boundary_gdf.crs,
+        "| Geometry:", boundary_gdf.geom_type.unique()
+    )
+
+# Display the names of all loaded boundaries
+print(boundaries.keys())
+print("Total boundaries loaded:", len(boundaries))
+```
+
+## Individual Boundary Maps
+
+```{python}
+# Loop through each historical boundary
+for boundary_name, boundary_gdf in boundaries.items():
+
+    # Convert to WGS84
+    if boundary_gdf.crs is not None:
+        boundary_gdf = boundary_gdf.to_crs("EPSG:4326")
+
+    # Create map
+    fig, ax = plt.subplots(figsize=(14, 9))
+
+    boundary_gdf.plot(
+        ax=ax,
+        facecolor="#D9E2EC",
+        edgecolor="#041E42",
+        linewidth=1
+    )
+
+    ax.set_title(
+        f"Roman Empire: {boundary_name}",
+        fontsize=16
+    )
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.grid(alpha=0.2)
+
+    plt.tight_layout()
+    plt.show()
+
+```
+
+
+# Battles Overlaid on Roman Territory (314 AD)
+
+```{python}
+# Get the 314 AD boundary
+boundary_314 = boundaries["roman_314_AD"].copy()
+
+# Convert boundary to WGS84
+if boundary_314.crs is not None:
+    boundary_314 = boundary_314.to_crs("EPSG:4326")
+
+# Create map
+fig, ax = plt.subplots(figsize=(16, 10))
+
+# Plot Roman territorial boundary
+boundary_314.plot(
+    ax=ax,
+    facecolor="#D9E2EC",
+    edgecolor="#041E42",
+    linewidth=1,
+    alpha=0.8
+)
+
+# Plot battle-associated locations
+battle_locations_gdf.plot(
+    ax=ax,
+    color="#B23A48",
+    markersize=12,
+    alpha=0.65,
+    label="Battle-associated locations"
+)
+
+# Map formatting
+ax.set_title(
+    "Battle-Associated Locations and Roman Territorial Extent (314 AD)",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+
+ax.legend(loc="lower left")
+ax.grid(alpha=0.2)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+
+# Battle Assigned to Appropriate Maps
+
+```{python}
+# Inspect battle dates
+print(battle_locations_df["battle_date"].head(15))
+
+print("\nData type:")
+print(battle_locations_df["battle_date"].dtype)
+
+```
+
+## Set the Years
+
+```{python}
+# Extract signed year from Wikidata date
+battle_locations_gdf["battle_year"] = (
+    battle_locations_gdf["battle_date"]
+    .str.extract(r"^([+-]\d{4})")[0]
+    .astype(float)
+)
+
+# Inspect converted dates
+print(
+    battle_locations_gdf[
+        ["battle_name", "battle_date", "battle_year"]
+    ].head(15)
+)
+
+```
+
+## Partition Them 
+```{python}
+# Define chronological boundary intervals
+periods = [
+    ("roman_264_BC", None, -264),
+    ("roman_133_BC", -264, -133),
+    ("roman_60_BC", -133, -60),
+    ("roman_44_BC", -60, -44),
+    ("roman_14_AD", -44, 14),
+    ("roman_69_AD", 14, 69),
+    ("roman_117_AD", 69, 117),
+    ("roman_200_AD", 117, 200),
+    ("roman_314_AD", 200, 314)
+]
+
+# Assign each battle to a period
+def assign_period(year):
+
+    for boundary_name, start_year, end_year in periods:
+
+        if start_year is None and year <= end_year:
+            return boundary_name
+
+        elif start_year is not None and start_year < year <= end_year:
+            return boundary_name
+
+    return None
+
+
+battle_locations_gdf["boundary_period"] = (
+    battle_locations_gdf["battle_year"].apply(assign_period)
+)
+
+```
+
+## Distribution
+```{python}
+# Count unique battles assigned to each period
+for boundary_name, start_year, end_year in periods:
+
+    period_battles = battle_locations_gdf[
+        battle_locations_gdf["boundary_period"] == boundary_name
+    ]
+
+    print(
+        boundary_name,
+        "| Battle-location records:", len(period_battles),
+        "| Unique battles:", period_battles["battle_wikidata_id"].nunique()
+    )
+
+# Check battles outside our six periods
+unassigned = battle_locations_gdf[
+    battle_locations_gdf["boundary_period"].isna()
+]
+
+print("\nUnassigned records:", len(unassigned))
+print(
+    "Unique unassigned battles:",
+    unassigned["battle_wikidata_id"].nunique()
+)
+
+```
+
+## Generate the Maps
+```{python}
+# Generate one map for each historical period
+for boundary_name, start_year, end_year in periods:
+
+    # Get corresponding Roman boundary
+    boundary_gdf = boundaries[boundary_name].copy()
+
+    # Convert boundary to WGS84
+    if boundary_gdf.crs is not None:
+        boundary_gdf = boundary_gdf.to_crs("EPSG:4326")
+
+    # Filter battles for this period
+    period_battles = battle_locations_gdf[
+        battle_locations_gdf["boundary_period"] == boundary_name
+    ].copy()
+
+    # Create map
+    fig, ax = plt.subplots(figsize=(16, 10))
+
+    # Plot Roman territory
+    boundary_gdf.plot(
+        ax=ax,
+        facecolor="#D9E2EC",
+        edgecolor="#041E42",
+        linewidth=1,
+        alpha=0.8
+    )
+
+    # Plot battles
+    if not period_battles.empty:
+        period_battles.plot(
+            ax=ax,
+            color="#B23A48",
+            markersize=12,
+            alpha=0.65,
+            label="Battle-associated locations"
+        )
+
+    # Format map
+    ax.set_title(
+        f"Battle-Associated Locations and Roman Territory: "
+        f"{boundary_name}",
+        fontsize=16
+    )
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    ax.legend(loc="lower left")
+    ax.grid(alpha=0.2)
+
+    plt.tight_layout()
+    plt.show()
+
+    print(
+        boundary_name,
+        "| Unique battles:",
+        period_battles["battle_wikidata_id"].nunique()
+    )
+
+```
+
+# Settlements and Boundaries
+
+```{python}
+# Get the 314 AD boundary
+boundary_314 = boundaries["roman_314_AD"].copy()
+
+# Convert boundary to WGS84
+if boundary_314.crs is not None:
+    boundary_314 = boundary_314.to_crs("EPSG:4326")
+
+# Create map
+fig, ax = plt.subplots(figsize=(16, 10))
+
+# Plot Roman territorial boundary
+boundary_314.plot(
+    ax=ax,
+    facecolor="#D9E2EC",
+    edgecolor="#041E42",
+    linewidth=1,
+    alpha=0.8
+)
+
+# Plot all ancient settlements
+settlements_gdf.plot(
+    ax=ax,
+    color="#2878A5",
+    markersize=5,
+    alpha=0.5,
+    label="Ancient settlements"
+)
+
+# Map formatting
+ax.set_title(
+    "Ancient Settlements and Roman Territorial Extent (314 AD)",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+
+ax.legend(loc="lower left")
+ax.grid(alpha=0.2)
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Partitioning Settlements to fit on appropriate maps
+
+### Set up
+```{python}
+# Convert settlement date fields to numeric values
+settlements_gdf["MINDATE"] = pd.to_numeric(
+    settlements_gdf["MINDATE"],
+    errors="coerce"
+)
+
+settlements_gdf["MAXDATE"] = pd.to_numeric(
+    settlements_gdf["MAXDATE"],
+    errors="coerce"
+)
+
+# Keep settlements with valid date ranges
+settlements_dated = settlements_gdf[
+    settlements_gdf["MINDATE"].notna()
+    & settlements_gdf["MAXDATE"].notna()
+    & (settlements_gdf["MINDATE"] <= settlements_gdf["MAXDATE"])
+].copy()
+
+print("Total settlement records:", len(settlements_gdf))
+print("Settlements with valid date ranges:", len(settlements_dated))
+print(
+    "Settlements without valid date ranges:",
+    len(settlements_gdf) - len(settlements_dated)
+)
+
+# Inspect the converted dates
+print(
+    settlements_dated[
+        ["ID", "GEOCONTEXT", "MINDATE", "MAXDATE"]
+    ].head(15)
+)
+
+```
+
+### Partitioning
+```{python}
+# Generate one settlement subset for each historical period
+settlement_periods = {}
+
+for boundary_name, start_year, end_year in periods:
+
+    # Settlement must have begun by the end of the period
+    period_settlements = settlements_dated[
+        settlements_dated["MINDATE"] <= end_year
+    ].copy()
+
+    # Settlement must also potentially have existed after the start
+    if start_year is not None:
+        period_settlements = period_settlements[
+            period_settlements["MAXDATE"] >= start_year
+        ].copy()
+
+    # Store settlements for this period
+    settlement_periods[boundary_name] = period_settlements
+
+    print(
+        boundary_name,
+        "| Settlements:", len(period_settlements)
+    )
+
+```
+
+
+```{python}
+# Generate one settlement map for each historical period
+for boundary_name, start_year, end_year in periods:
+
+    # Get corresponding Roman boundary
+    boundary_gdf = boundaries[boundary_name].copy()
+
+    # Convert boundary to WGS84
+    if boundary_gdf.crs is not None:
+        boundary_gdf = boundary_gdf.to_crs("EPSG:4326")
+
+    # Get settlements for this period
+    period_settlements = settlement_periods[boundary_name]
+
+    # Create map
+    fig, ax = plt.subplots(figsize=(16, 10))
+
+    # Plot Roman territory
+    boundary_gdf.plot(
+        ax=ax,
+        facecolor="#D9E2EC",
+        edgecolor="#041E42",
+        linewidth=1,
+        alpha=0.8
+    )
+
+    # Plot settlements
+    if not period_settlements.empty:
+        period_settlements.plot(
+            ax=ax,
+            color="#2878A5",
+            markersize=5,
+            alpha=0.5,
+            label="Ancient settlements"
+        )
+
+    # Format map
+    ax.set_title(
+        f"Ancient Settlements and Roman Territory: "
+        f"{boundary_name}",
+        fontsize=16
+    )
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    if not period_settlements.empty:
+        ax.legend(loc="lower left")
+
+    ax.grid(alpha=0.2)
+
+    plt.tight_layout()
+    plt.show()
+
+    print(
+        boundary_name,
+        "| Settlements:",
+        len(period_settlements)
+    )
+
+
+```
+
+# Settlement Deep Dive
+
+
+```{python}
+# Inspect all settlement attributes
+print("Number of settlement records:", len(settlements_gdf))
+print("Number of attributes:", len(settlements_gdf.columns))
+
+for column in settlements_gdf.columns:
+
+    # Count non-null values
+    non_null = settlements_gdf[column].notna().sum()
+
+    # Count distinct values
+    unique = settlements_gdf[column].nunique()
+
+    # Calculate percentage populated
+    percentage = round(non_null / len(settlements_gdf) * 100, 2)
+
+    print(
+        column,
+        "| Non-null:", non_null,
+        "| Unique:", unique,
+        "| Populated:", f"{percentage}%"
+    )
+
+```
+
+
+## Attribute Close up 
+
+```{python}
+# Potential categorical attributes
+candidate_columns = [
+    "FEATURETYP",
+    "GEOCONTEXT",
+    "TIMEPERIOD",
+    "TIMEPER_01",
+    "TIMEPER_02"
+]
+
+# Display the most common values in each attribute
+for column in candidate_columns:
+
+    if column in settlements_gdf.columns:
+
+        print("\n", column)
+        print(
+            settlements_gdf[column]
+            .value_counts(dropna=False)
+            .head(20)
+        )
+
+```
+
+### Feature Investigation
+
+```{python}
+# Define feature categories to investigate
+feature_categories = [
+    "port",
+    "temple",
+    "fort",
+    "amphitheatre",
+    "theatre",
+    "bath",
+    "villa",
+    "cemetery",
+    "mine",
+    "church"
+]
+
+# Count records containing each feature classification
+for category in feature_categories:
+
+    matching = settlements_gdf[
+        settlements_gdf["FEATURETYP"]
+        .str.contains(category, case=False, na=False)
+    ]
+
+    print(
+        category,
+        "| Records:", len(matching),
+        "| Percentage:", round(
+            len(matching) / len(settlements_gdf) * 100, 2
+        )
+    )
+
+```
+
+
+```{python}
+# Define feature categories
+feature_categories = [
+    "port",
+    "temple",
+    "fort",
+    "amphitheatre",
+    "theatre"
+]
+
+# Create a summary table
+feature_period_counts = []
+
+for boundary_name, period_settlements in settlement_periods.items():
+
+    for category in feature_categories:
+
+        matching = period_settlements[
+            period_settlements["FEATURETYP"]
+            .str.contains(category, case=False, na=False)
+        ]
+
+        feature_period_counts.append({
+            "period": boundary_name,
+            "feature": category,
+            "count": len(matching)
+        })
+
+# Convert results to DataFrame
+feature_period_df = pd.DataFrame(feature_period_counts)
+
+# Display counts by period
+feature_period_pivot = feature_period_df.pivot(
+    index="feature",
+    columns="period",
+    values="count"
+)
+
+feature_period_pivot
+
+```
+
+## Settlement Map
+
+### Special Features
+```{python}
+feature_styles = {
+    "port": {
+        "marker": "o",
+        "color": "#2878A5"
+    },
+    "temple": {
+        "marker": "^",
+        "color": "#D69E36"
+    },
+    "fort": {
+        "marker": "s",
+        "color": "#A23B3B"
+    },
+    "amphitheatre": {
+        "marker": "D",
+        "color": "#6A8F5B"
+    },
+    "theatre": {
+        "marker": "P",
+        "color": "#8064A2"
+    }
+}
+
+
+```
+
+
+### Map all five feature types on the latest Roman boundary
+
+```{python}
+boundary_314 = boundaries["roman_314_AD"].copy()
+
+if boundary_314.crs is not None:
+    boundary_314 = boundary_314.to_crs("EPSG:4326")
+
+fig, ax = plt.subplots(figsize=(16, 10))
+
+# Plot the latest Roman boundary
+boundary_314.plot(
+    ax=ax,
+    facecolor="#E6E6E6",
+    edgecolor="#041E42",
+    linewidth=1,
+    alpha=0.7
+)
+
+# Plot each feature type
+for feature, style in feature_styles.items():
+
+    feature_settlements = settlements_gdf[
+        settlements_gdf["FEATURETYP"].str.contains(
+            feature,
+            case=False,
+            na=False
+        )
+    ]
+
+    feature_settlements.plot(
+        ax=ax,
+        marker=style["marker"],
+        color=style["color"],
+        markersize=18,
+        alpha=0.75,
+        edgecolor="black",
+        linewidth=0.3,
+        label=feature.capitalize()
+    )
+
+ax.set_title(
+    "Ancient Settlements by Feature Type",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.legend(title="Settlement Feature", loc="upper left")
+
+ax.set_axis_off()
+plt.show()
+
+```
+
+## Partition the maps by historical period
+
+```{python}
+fig, axes = plt.subplots(
+    3,
+    3,
+    figsize=(20, 16)
+)
+
+axes = axes.flatten()
+
+for ax, (boundary_name, start_year, end_year) in zip(axes, periods):
+
+    # Get the corresponding boundary
+    boundary = boundaries[boundary_name].copy()
+
+    if boundary.crs is not None:
+        boundary = boundary.to_crs("EPSG:4326")
+
+    # Get settlements overlapping this period
+    period_settlements = settlement_periods[boundary_name]
+
+    # Plot the Roman boundary
+    boundary.plot(
+        ax=ax,
+        facecolor="#E6E6E6",
+        edgecolor="#041E42",
+        linewidth=0.8,
+        alpha=0.7
+    )
+
+    # Plot each feature type
+    for feature, style in feature_styles.items():
+
+        feature_settlements = period_settlements[
+            period_settlements["FEATURETYP"].str.contains(
+                feature,
+                case=False,
+                na=False
+            )
+        ]
+
+        feature_settlements.plot(
+            ax=ax,
+            marker=style["marker"],
+            color=style["color"],
+            markersize=12,
+            alpha=0.75,
+            edgecolor="black",
+            linewidth=0.2
+        )
+
+    # Set the subplot title
+    period_title = boundary_name.replace("roman_", "").replace("_", " ")
+
+    ax.set_title(period_title, fontsize=13)
+    ax.set_axis_off()
+
+
+# Create one shared legend
+from matplotlib.lines import Line2D
+
+legend_elements = [
+    Line2D(
+        [0], [0],
+        marker=style["marker"],
+        color="w",
+        markerfacecolor=style["color"],
+        markeredgecolor="black",
+        markersize=9,
+        label=feature.capitalize()
+    )
+    for feature, style in feature_styles.items()
+]
+
+fig.legend(
+    handles=legend_elements,
+    title="Settlement Feature",
+    loc="lower center",
+    ncol=5,
+    fontsize=11
+)
+
+fig.suptitle(
+    "Ancient Settlements by Feature Type Across Historical Periods",
+    fontsize=18,
+    y=0.98
+)
+
+plt.tight_layout(rect=[0, 0.06, 1, 0.95])
+plt.show()
+
+
+```
+
+
+# Combined Maps
+
+## All Points on Latest Roman Map
+```{python}
+from matplotlib.lines import Line2D
+
+# Get the latest Roman boundary
+boundary_314 = boundaries["roman_314_AD"].copy()
+
+if boundary_314.crs is not None:
+    boundary_314 = boundary_314.to_crs("EPSG:4326")
+
+# Create the map
+fig, ax = plt.subplots(figsize=(18, 12))
+
+# 1. Plot Roman territory
+boundary_314.plot(
+    ax=ax,
+    facecolor="#E6E6E6",
+    edgecolor="#041E42",
+    linewidth=1,
+    alpha=0.7
+)
+
+# 2. Plot all ancient settlements as small background points
+settlements_gdf.plot(
+    ax=ax,
+    color="#9A9A9A",
+    markersize=3,
+    alpha=0.25,
+    zorder=2
+)
+
+# 3. Plot special settlement features
+for feature, style in feature_styles.items():
+
+    feature_settlements = settlements_gdf[
+        settlements_gdf["FEATURETYP"].str.contains(
+            feature,
+            case=False,
+            na=False
+        )
+    ]
+
+    if not feature_settlements.empty:
+        feature_settlements.plot(
+            ax=ax,
+            marker=style["marker"],
+            color=style["color"],
+            markersize=22,
+            alpha=0.85,
+            edgecolor="black",
+            linewidth=0.4,
+            zorder=3
+        )
+
+# 4. Plot battle-associated locations
+battle_locations_gdf.plot(
+    ax=ax,
+    marker="*",
+    color="#B23A48",
+    markersize=65,
+    alpha=0.85,
+    edgecolor="black",
+    linewidth=0.4,
+    zorder=4
+)
+
+# Create a custom legend
+legend_elements = [
+    Line2D(
+        [0], [0],
+        marker="o",
+        color="w",
+        markerfacecolor="#9A9A9A",
+        markersize=5,
+        label="Other ancient settlements"
+    ),
+    Line2D(
+        [0], [0],
+        marker="*",
+        color="w",
+        markerfacecolor="#B23A48",
+        markeredgecolor="black",
+        markersize=13,
+        label="Battle-associated locations"
+    )
+]
+
+# Add the five special settlement types
+for feature, style in feature_styles.items():
+
+    legend_elements.append(
+        Line2D(
+            [0], [0],
+            marker=style["marker"],
+            color="w",
+            markerfacecolor=style["color"],
+            markeredgecolor="black",
+            markersize=9,
+            label=feature.capitalize()
+        )
+    )
+
+ax.set_title(
+    "Roman Battles and Ancient Settlements "
+    "within the Roman Territorial Extent (314 AD)",
+    fontsize=17,
+    pad=15
+)
+
+ax.legend(
+    handles=legend_elements,
+    title="Map Features",
+    loc="lower left",
+    fontsize=10
+)
+
+ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()
+
+
+```
+
+
+## Partitioned Map
+
+```{python}
+# Create a 3 x 3 grid of maps
+fig, axes = plt.subplots(
+    3,
+    3,
+    figsize=(22, 17)
+)
+
+axes = axes.flatten()
+
+# Generate one map for each historical period
+for ax, (boundary_name, start_year, end_year) in zip(axes, periods):
+
+    # Get the corresponding Roman boundary
+    boundary = boundaries[boundary_name].copy()
+
+    if boundary.crs is not None:
+        boundary = boundary.to_crs("EPSG:4326")
+
+    # Get settlements overlapping this historical period
+    period_settlements = settlement_periods[boundary_name]
+
+    # Get battles assigned to this historical period
+    period_battles = battle_locations_gdf[
+        battle_locations_gdf["boundary_period"] == boundary_name
+    ].copy()
+
+    # 1. Plot Roman territory
+    boundary.plot(
+        ax=ax,
+        facecolor="#E6E6E6",
+        edgecolor="#041E42",
+        linewidth=0.8,
+        alpha=0.7,
+        zorder=1
+    )
+
+    # 2. Plot all settlements as background points
+    if not period_settlements.empty:
+
+        period_settlements.plot(
+            ax=ax,
+            color="#9A9A9A",
+            markersize=2,
+            alpha=0.2,
+            zorder=2
+        )
+
+    # 3. Plot special settlement features
+    for feature, style in feature_styles.items():
+
+        feature_settlements = period_settlements[
+            period_settlements["FEATURETYP"].str.contains(
+                feature,
+                case=False,
+                na=False
+            )
+        ]
+
+        if not feature_settlements.empty:
+
+            feature_settlements.plot(
+                ax=ax,
+                marker=style["marker"],
+                color=style["color"],
+                markersize=12,
+                alpha=0.85,
+                edgecolor="black",
+                linewidth=0.2,
+                zorder=3
+            )
+
+    # 4. Plot battle-associated locations
+    if not period_battles.empty:
+
+        period_battles.plot(
+            ax=ax,
+            marker="*",
+            color="#B23A48",
+            markersize=35,
+            alpha=0.85,
+            edgecolor="black",
+            linewidth=0.3,
+            zorder=4
+        )
+
+    # Count unique battles for the panel title
+    battle_count = period_battles["battle_wikidata_id"].nunique()
+
+    # Format panel title
+    period_title = (
+        boundary_name
+        .replace("roman_", "")
+        .replace("_", " ")
+    )
+
+    ax.set_title(
+        f"{period_title}\n"
+        f"{battle_count} battles | "
+        f"{len(period_settlements)} settlements",
+        fontsize=12
+    )
+
+    ax.set_axis_off()
+
+
+# Create a shared legend
+legend_elements = [
+    Line2D(
+        [0], [0],
+        marker="o",
+        color="w",
+        markerfacecolor="#9A9A9A",
+        markersize=5,
+        label="Other ancient settlements"
+    ),
+    Line2D(
+        [0], [0],
+        marker="*",
+        color="w",
+        markerfacecolor="#B23A48",
+        markeredgecolor="black",
+        markersize=12,
+        label="Battle-associated locations"
+    )
+]
+
+# Add special settlement categories
+for feature, style in feature_styles.items():
+
+    legend_elements.append(
+        Line2D(
+            [0], [0],
+            marker=style["marker"],
+            color="w",
+            markerfacecolor=style["color"],
+            markeredgecolor="black",
+            markersize=9,
+            label=feature.capitalize()
+        )
+    )
+
+
+fig.legend(
+    handles=legend_elements,
+    title="Map Features",
+    loc="lower center",
+    ncol=7,
+    fontsize=10,
+    title_fontsize=11
+)
+
+fig.suptitle(
+    "Roman Battles and Ancient Settlements Across Historical Periods",
+    fontsize=19,
+    y=0.98
+)
+
+plt.tight_layout(rect=[0, 0.07, 1, 0.95])
+plt.show()
+
+```

@@ -1,0 +1,982 @@
+
+
+# Overview
+This File pulls in battles from WikiData
+
+
+
+# Libaries
+```{python}
+
+import requests
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+
+```
+
+
+
+```{python}
+
+headers = {
+    "User-Agent": "RomanBattlesGIS/1.0 (academic research project)"
+}
+
+url = "https://www.wikidata.org/w/api.php"
+
+
+def get_entity(qid):
+    params = {
+        "action": "wbgetentities",
+        "ids": qid,
+        "format": "json"
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        headers=headers
+    )
+
+    response.raise_for_status()
+
+    return response.json()["entities"][qid]
+
+
+def get_claim(entity, property_id):
+    """Return the first claim for a property."""
+    
+    claims = entity.get("claims", {}).get(property_id, [])
+    
+    if not claims:
+        return None
+    
+    return claims[0]
+
+
+def get_string_claim(entity, property_id):
+    """Extract a simple string claim."""
+    
+    claim = get_claim(entity, property_id)
+    
+    if claim is None:
+        return None
+    
+    return claim["mainsnak"]["datavalue"]["value"]
+
+```
+
+
+# WikiData Extraction Functions
+```{python}
+def extract_entity_id_claim(entity, property_id):
+    """Extract entity QIDs from a Wikidata property."""
+    
+    claims = entity.get("claims", {}).get(property_id, [])
+    
+    values = []
+    
+    for claim in claims:
+        datavalue = claim["mainsnak"].get("datavalue")
+        
+        if datavalue and datavalue["type"] == "wikibase-entityid":
+            values.append(datavalue["value"]["id"])
+    
+    return values
+
+
+def extract_date_claim(entity, property_id="P585"):
+    """Extract a Wikidata date as a raw string."""
+    
+    claim = get_claim(entity, property_id)
+    
+    if claim is None:
+        return None
+    
+    return claim["mainsnak"]["datavalue"]["value"]["time"]
+
+
+def extract_coordinates(entity):
+    """Extract latitude and longitude from P625."""
+    
+    claim = get_claim(entity, "P625")
+    
+    if claim is None:
+        return None, None
+    
+    coordinates = claim["mainsnak"]["datavalue"]["value"]
+    
+    return coordinates["latitude"], coordinates["longitude"]
+
+def extract_wikipedia_url(entity):
+    """Extract the English Wikipedia article URL from a Wikidata entity."""
+    
+    sitelinks = entity.get("sitelinks", {})
+    english_article = sitelinks.get("enwiki")
+    
+    if english_article is None:
+        return None
+    
+    title = english_article["title"]
+    
+    return f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
+
+
+def extract_battle(qid):
+    """Extract the initial raw data for a battle from Wikidata."""
+    
+    entity = get_entity(qid)
+    
+    # Basic information
+    name = entity.get("labels", {}).get("en", {}).get("value")
+    
+    description = entity.get(
+        "descriptions", {}
+    ).get("en", {}).get("value")
+    
+    # Date
+    date = extract_date_claim(entity, "P585")
+    
+    # Location
+    location = extract_entity_id_claim(entity, "P276")
+    
+    # Coordinates
+    latitude, longitude = extract_coordinates(entity)
+    
+    # Part of
+    part_of = extract_entity_id_claim(entity, "P361")
+    
+    # Participants
+    participants = extract_entity_id_claim(entity, "P710")
+    
+    # Instance of
+    instance_of = extract_entity_id_claim(entity, "P31")
+
+    # English Wikipedia article
+    wikipedia_url = extract_wikipedia_url(entity)
+
+    return {
+        "wikidata_id": qid,
+        "name": name,
+        "description": description,
+        "date": date,
+        "location": location,
+        "latitude": latitude,
+        "longitude": longitude,
+        "part_of": part_of,
+        "participants": participants,
+        "instance_of": instance_of,
+        "wikipedia_url": wikipedia_url
+    }
+
+```
+
+
+## Turn Into GeoPandas Dataframe
+```{python}
+def battles_to_gdf(battles):
+    """Convert battle records into a GeoDataFrame."""
+    
+    df = pd.DataFrame(battles)
+    
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(
+            df["longitude"],
+            df["latitude"]
+        ),
+        crs="EPSG:4326"
+    )
+    
+    return gdf
+
+```
+
+## Test Functions
+```{python}
+actium = extract_battle("Q160387")
+
+gdf = battles_to_gdf([actium])
+
+gdf
+
+```
+
+
+## Find Entities
+
+```{python}
+def get_label(qid):
+    """Get the English label for a Wikidata entity."""
+    
+    entity = get_entity(qid)
+    
+    return entity.get("labels", {}).get("en", {}).get("value")
+
+```
+
+```{python}
+# Get raw Actium Wikidata entity
+actium_entity = get_entity("Q160387")
+
+# Get participant QIDs
+participant_qids = extract_entity_id_claim(
+    actium_entity,
+    "P710"
+)
+
+# Get participant names
+participants = []
+
+for qid in participant_qids:
+    participants.append({
+        "wikidata_id": qid,
+        "name": get_label(qid)
+    })
+
+participants_df = pd.DataFrame(participants)
+
+participants_df
+
+```
+
+## Inspect Battle
+
+```{python}
+def inspect_battle(qid):
+    """Return the basic descriptive information for a Wikidata item."""
+    
+    entity = get_entity(qid)
+    
+    return {
+        "wikidata_id": qid,
+        "name": entity.get("labels", {}).get("en", {}).get("value"),
+        "description": entity.get("descriptions", {}).get("en", {}).get("value"),
+        "date": extract_date_claim(entity, "P585"),
+        "location": extract_entity_id_claim(entity, "P276"),
+        "latitude": extract_coordinates(entity)[0],
+        "longitude": extract_coordinates(entity)[1],
+        "instance_of": extract_entity_id_claim(entity, "P31")
+    }
+
+```
+
+```{python}
+inspect_battle("Q160387")
+```
+
+## Instance Of
+```{python}
+def get_entity_label(qid):
+    """Get the English label for a Wikidata entity."""
+    
+    entity = get_entity(qid)
+    
+    return entity.get("labels", {}).get("en", {}).get("value")
+
+```
+
+```{python}
+for qid in actium["instance_of"]:
+    print("INSTANCE OF:", qid, "→", get_entity_label(qid))
+
+for qid in actium["part_of"]:
+    print("PART OF:", qid, "→", get_entity_label(qid))
+
+for qid in actium["location"]:
+    print("LOCATION:", qid, "→", get_entity_label(qid))
+
+```
+
+# Testing all fields
+
+```{python}
+def inspect_all_claims(qid):
+    """Print all Wikidata claims in a human-readable format."""
+    
+    entity = get_entity(qid)
+    
+    print(f"NAME: {entity.get('labels', {}).get('en', {}).get('value')}")
+    print(f"DESCRIPTION: {entity.get('descriptions', {}).get('en', {}).get('value')}")
+    
+    # Collect all QIDs that appear in the claims
+    qids = set()
+    
+    for property_id, claims in entity.get("claims", {}).items():
+        qids.add(property_id)
+        
+        for claim in claims:
+            datavalue = claim.get("mainsnak", {}).get("datavalue")
+            
+            if datavalue and datavalue.get("type") == "wikibase-entityid":
+                qids.add(datavalue["value"]["id"])
+    
+    # Get labels in batches
+    labels = {}
+    
+    qids = list(qids)
+    
+    for i in range(0, len(qids), 50):
+        batch = qids[i:i+50]
+        
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "props": "labels",
+            "languages": "en",
+            "format": "json"
+        }
+        
+        response = requests.get(
+            url,
+            params=params,
+            headers=headers
+        )
+        response.raise_for_status()
+        
+        data = response.json()["entities"]
+        
+        for entity_id, entity_data in data.items():
+            labels[entity_id] = (
+                entity_data
+                .get("labels", {})
+                .get("en", {})
+                .get("value", entity_id)
+            )
+        
+        # Be polite to Wikidata
+        import time
+        time.sleep(0.5)
+    
+    print("\nCLAIMS")
+    print("=" * 80)
+    
+    for property_id, claims in entity.get("claims", {}).items():
+        
+        property_name = labels.get(property_id, property_id)
+        
+        print(f"\n{property_id} — {property_name}")
+        
+        for claim in claims:
+            mainsnak = claim.get("mainsnak", {})
+            datavalue = mainsnak.get("datavalue")
+            
+            if not datavalue:
+                print("  → [no value]")
+                continue
+            
+            value_type = datavalue.get("type")
+            value = datavalue.get("value")
+            
+            # QID
+            if value_type == "wikibase-entityid":
+                value_qid = value["id"]
+                value_label = labels.get(value_qid, value_qid)
+                print(f"  → {value_qid} — {value_label}")
+            
+            # Date
+            elif value_type == "time":
+                print(f"  → {value['time']}")
+            
+            # Coordinates
+            elif value_type == "globecoordinate":
+                print(
+                    f"  → {value['latitude']}, "
+                    f"{value['longitude']}"
+                )
+            
+            # String
+            elif value_type == "string":
+                print(f"  → {value}")
+            
+            # Quantity
+            elif value_type == "quantity":
+                print(f"  → {value['amount']}")
+            
+            # URL
+            elif value_type == "url":
+                print(f"  → {value}")
+            
+            else:
+                print(f"  → {value}")
+```
+
+```{python}
+
+inspect_all_claims("Q160387")
+```
+
+
+# Candidate Discovery Stage
+
+```{python}
+# Wikidata SPARQL endpoint
+sparql_url = "https://query.wikidata.org/sparql"
+
+# Candidate Discovery: SPARQL query
+
+# Candidate Discovery: first test query
+
+query = """
+SELECT DISTINCT ?event ?date
+WHERE {
+    ?event wdt:P31 wd:Q178561 ;
+           wdt:P585 ?date .
+
+    FILTER(
+        ?date >= "-0300-01-01T00:00:00Z"^^xsd:dateTime
+        &&
+        ?date < "0501-01-01T00:00:00Z"^^xsd:dateTime
+    )
+}
+LIMIT 1000
+"""
+
+response = requests.get(
+    sparql_url,
+    params={
+        "query": query,
+        "format": "json"
+    },
+    headers=headers,
+    timeout=90
+)
+
+print("HTTP status:", response.status_code)
+
+response.raise_for_status()
+
+results = response.json()["results"]["bindings"]
+
+print("Rows returned:", len(results))
+
+
+```
+
+
+## Data Frame
+```{python}
+# Convert SPARQL results into a DataFrame
+
+candidate_rows = []
+
+for result in results:
+    latitude = result.get("latitude", {}).get("value")
+    longitude = result.get("longitude", {}).get("value")
+
+    candidate_rows.append({
+        "wikidata_id": result["event"]["value"].rsplit("/", 1)[-1],
+        "name": result.get("eventLabel", {}).get("value"),
+        "date": result.get("date", {}).get("value"),
+        "latitude": float(latitude) if latitude else None,
+        "longitude": float(longitude) if longitude else None,
+        "wikipedia_url": result.get("article", {}).get("value")
+    })
+
+candidates_df = pd.DataFrame(candidate_rows)
+
+# Remove duplicate rows caused by overlapping classifications
+# or multiple date statements, while preserving distinct dates.
+candidates_df = candidates_df.drop_duplicates(
+    subset=["wikidata_id", "date", "latitude", "longitude"]
+).reset_index(drop=True)
+
+print("Candidate records:", len(candidates_df))
+print("Unique events:", candidates_df["wikidata_id"].nunique())
+print("Missing coordinates:", candidates_df["latitude"].isna().sum())
+
+candidates_df.head(10)
+
+```
+
+## Check
+```{python}
+candidates_df[
+    [
+        "wikidata_id",
+        "name",
+        "date",
+        "latitude",
+        "longitude",
+        "wikipedia_url"
+    ]
+].head(30)
+
+```
+
+### Number of Events
+```{python}
+print("Unique events:", candidates_df["wikidata_id"].nunique())
+
+print(
+    "Events without coordinates:",
+    candidates_df.loc[
+        candidates_df["latitude"].isna()
+        | candidates_df["longitude"].isna(),
+        "wikidata_id"
+    ].nunique()
+)
+
+print(
+    "Events without dates:",
+    candidates_df["date"].isna().sum()
+)
+
+```
+
+### Check
+```{python}
+actium = extract_battle("Q160387")
+
+print("Name:", actium["name"])
+print("Date:", actium["date"])
+print("Latitude:", actium["latitude"])
+print("Longitude:", actium["longitude"])
+print("Wikipedia URL:", actium["wikipedia_url"])
+
+```
+
+
+# Pull in more information
+
+```{python}
+import time
+import requests
+
+# Keep successfully retrieved entities available between batches
+entity_cache = {}
+
+def fetch_entities_in_batches(qids, batch_size=25):
+    """Fetch Wikidata entities in batches with retry handling."""
+
+    for start in range(0, len(qids), batch_size):
+        batch = [
+            qid for qid in qids[start:start + batch_size]
+            if qid not in entity_cache
+        ]
+
+        if not batch:
+            continue
+
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "format": "json",
+            "maxlag": 5,
+        }
+
+        success = False
+
+        for attempt in range(8):
+            try:
+                response = requests.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=60,
+                )
+
+                if response.status_code == 429 or response.status_code >= 500:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_seconds = (
+                        int(retry_after)
+                        if retry_after and retry_after.isdigit()
+                        else 60 * (attempt + 1)
+                    )
+
+                    print(
+                        f"Temporary HTTP {response.status_code}. "
+                        f"Waiting {wait_seconds} seconds."
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                if "error" in data:
+                    error_code = data["error"].get("code", "unknown")
+                    error_info = data["error"].get("info", "")
+
+                    print(
+                        f"Wikidata API error ({error_code}): {error_info}"
+                    )
+
+                    if error_code == "maxlag":
+                        time.sleep(15 * (attempt + 1))
+                        continue
+
+                    print("Stopping because this is not a temporary maxlag error.")
+                    break
+
+                if "entities" not in data:
+                    print("Unexpected Wikidata response:", data)
+                    time.sleep(30 * (attempt + 1))
+                    continue
+
+                entity_cache.update(data["entities"])
+                success = True
+                break
+
+            except (requests.RequestException, ValueError) as e:
+                print(f"Request failed: {e}")
+                time.sleep(30 * (attempt + 1))
+
+        if not success:
+            print(f"Could not retrieve batch starting at index {start}.")
+            print("Stopping; successfully retrieved entities are preserved.")
+            break
+
+        print(
+            f"Retrieved {len(entity_cache)} of {len(qids)} entities"
+        )
+
+        time.sleep(3)
+
+    return entity_cache
+
+
+```
+
+## Pull in IDs
+
+```{python}
+
+candidate_ids = sorted({
+    row["event"]["value"].rsplit("/", 1)[-1]
+    for row in results
+})
+
+print("Unique candidate IDs:", len(candidate_ids))
+
+entity_cache = fetch_entities_in_batches(candidate_ids)
+
+print("Entities retrieved:", len(entity_cache))
+
+```
+
+## Extract records and create the GeoDataFrame
+
+```{python}
+
+# Check whether all candidate entities were retrieved
+missing_ids = [
+    qid for qid in candidate_ids
+    if qid not in entity_cache
+]
+
+print("Missing entities:", len(missing_ids))
+
+if missing_ids:
+    print("Please retrieve the missing entities before extraction.")
+
+else:
+    def get_entity(qid):
+        """Return an entity from the cache."""
+        return entity_cache[qid]
+
+    battles = []
+
+    for i, qid in enumerate(candidate_ids, start=1):
+        try:
+            battles.append(extract_battle(qid))
+        except Exception as e:
+            print(f"Could not extract {qid}: {e}")
+
+        if i % 50 == 0:
+            print(f"Processed {i} of {len(candidate_ids)} candidates")
+
+    print("Records retrieved:", len(battles))
+
+    battles_gdf = battles_to_gdf(battles)
+
+    print("Total records:", len(battles_gdf))
+    print("Records with coordinates:", battles_gdf.geometry.notna().sum())
+    print("Records without coordinates:", battles_gdf.geometry.isna().sum())
+
+
+```
+
+# Check Data Set
+
+```{python}
+# Check the extracted dataset
+
+print("Total records:", len(battles_gdf))
+print("Unique Wikidata IDs:", battles_gdf["wikidata_id"].nunique())
+print("Missing names:", battles_gdf["name"].isna().sum())
+print("Missing dates:", battles_gdf["date"].isna().sum())
+print("Missing coordinates:", battles_gdf.geometry.isna().sum())
+print("Duplicate Wikidata IDs:",
+      battles_gdf["wikidata_id"].duplicated().sum())
+
+# Check coordinate ranges
+print("Latitude range:",
+      battles_gdf.geometry.y.min(),
+      "to",
+      battles_gdf.geometry.y.max())
+
+print("Longitude range:",
+      battles_gdf.geometry.x.min(),
+      "to",
+      battles_gdf.geometry.x.max())
+
+# Preview the records
+battles_gdf[
+    ["wikidata_id", "name", "date", "latitude",
+     "longitude", "wikipedia_url"]
+].head(10)
+
+```
+
+## Additional Check
+
+```{python}
+# Compare coordinate fields with the geometry column
+
+print("Total records:", len(battles_gdf))
+
+print("Missing latitude:", battles_gdf["latitude"].isna().sum())
+print("Missing longitude:", battles_gdf["longitude"].isna().sum())
+print("Missing geometry:", battles_gdf.geometry.isna().sum())
+
+print("\nFirst 10 records:")
+display(
+    battles_gdf[
+        ["wikidata_id", "name", "latitude", "longitude", "geometry"]
+    ].head(10)
+)
+
+```
+
+
+## Usable Coordinates
+
+```{python}
+# Check which records have usable coordinates
+
+valid_coordinates = (
+    battles_gdf["latitude"].notna()
+    & battles_gdf["longitude"].notna()
+)
+
+print("Total records:", len(battles_gdf))
+print("Records with valid coordinates:", valid_coordinates.sum())
+print("Records without valid coordinates:", (~valid_coordinates).sum())
+print(
+    "Percentage with valid coordinates:",
+    round(valid_coordinates.mean() * 100, 1),
+    "%"
+)
+
+
+```
+
+
+## Inspect
+
+```{python}
+display(
+    battles_gdf[
+        [
+            "wikidata_id",
+            "name",
+            "date",
+            "participants",
+            "part_of",
+            "instance_of",
+            "latitude",
+            "longitude",
+            "wikipedia_url",
+        ]
+    ].head(15)
+)
+
+```
+
+```{python}
+# Inspect the underlying records without Markdown table formatting
+
+for _, row in battles_gdf.head(5).iterrows():
+    print(f"\n{row['name']} ({row['wikidata_id']})")
+    print("  Participants:", row["participants"])
+    print("  Part of:", row["part_of"])
+    print("  Instance of:", row["instance_of"])
+
+```
+
+
+### Export
+
+```{python}
+# Export all candidate events to CSV
+
+battles_gdf.drop(columns="geometry").to_csv(
+    "roman_battle_candidates.csv",
+    index=False,
+    encoding="utf-8-sig"
+)
+
+print("Exported", len(battles_gdf), "events.")
+
+```
+
+# Getting More location Data
+```{python}
+# Retrieve location entities in batches to reduce API requests
+
+import time
+import requests
+
+# Keep existing results if location_cache already exists
+if "location_cache" not in globals():
+    location_cache = {}
+
+# Only request locations that have not been retrieved yet
+locations_to_fetch = [
+    qid for qid in location_ids
+    if qid not in location_cache
+]
+
+print("Locations already cached:", len(location_cache))
+print("Locations remaining:", len(locations_to_fetch))
+
+for start in range(0, len(locations_to_fetch), 50):
+    batch = locations_to_fetch[start:start + 50]
+
+    params = {
+        "action": "wbgetentities",
+        "ids": "|".join(batch),
+        "format": "json",
+        "props": "labels|descriptions|claims|sitelinks",
+        "languages": "en",
+        "maxlag": 5,
+    }
+
+    for attempt in range(6):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=60,
+            )
+
+            if response.status_code == 429 or response.status_code >= 500:
+                wait = 60 * (attempt + 1)
+                print(f"Temporary HTTP {response.status_code}; waiting {wait}s")
+                time.sleep(wait)
+                continue
+
+            response.raise_for_status()
+            data = response.json()
+
+            if "error" in data:
+                error = data["error"]
+                print("Wikidata API error:", error)
+
+                if error.get("code") == "maxlag":
+                    time.sleep(15 * (attempt + 1))
+                    continue
+
+                break
+
+            for qid, entity in data.get("entities", {}).items():
+                if "missing" in entity:
+                    continue
+
+                latitude, longitude = extract_coordinates(entity)
+
+                location_cache[qid] = {
+                    "location_name": (
+                        entity.get("labels", {})
+                        .get("en", {})
+                        .get("value")
+                    ),
+                    "location_description": (
+                        entity.get("descriptions", {})
+                        .get("en", {})
+                        .get("value")
+                    ),
+                    "location_latitude": latitude,
+                    "location_longitude": longitude,
+                    "location_wikipedia_url": extract_wikipedia_url(entity),
+                }
+
+            print(
+                f"Retrieved location batch: "
+                f"{min(start + len(batch), len(locations_to_fetch))}"
+                f" of {len(locations_to_fetch)} requested"
+            )
+
+            time.sleep(3)
+            break
+
+        except (requests.RequestException, ValueError) as e:
+            print("Request failed:", e)
+            time.sleep(30 * (attempt + 1))
+
+    else:
+        print("Retries exhausted. Stopping to avoid excessive requests.")
+        break
+
+print("Location entities cached:", len(location_cache))
+
+```
+
+## Add Linked Locations
+
+```{python}
+# Add linked-location details to a copy of the battle dataset
+
+battles_with_locations = battles_gdf.copy()
+
+location_columns = [
+    "location_name",
+    "location_description",
+    "location_latitude",
+    "location_longitude",
+    "location_wikipedia_url",
+]
+
+for column in location_columns:
+    battles_with_locations[column] = battles_with_locations["location"].apply(
+        lambda locations: (
+            location_cache.get(locations[0], {}).get(column)
+            if isinstance(locations, list) and len(locations) == 1
+            else None
+        )
+    )
+
+# Inspect the results
+display(
+    battles_with_locations[
+        [
+            "wikidata_id",
+            "name",
+            "location",
+            "latitude",
+            "longitude",
+            "location_name",
+            "location_description",
+            "location_latitude",
+            "location_longitude",
+            "location_wikipedia_url",
+        ]
+    ].head(20)
+)
+
+# Export the enriched dataset
+battles_with_locations.drop(
+    columns="geometry"
+).to_csv(
+    "roman_battle_candidates_with_locations.csv",
+    index=False,
+    encoding="utf-8-sig",
+)
+
+print("Exported roman_battle_candidates_with_locations.csv")
+
+
+```

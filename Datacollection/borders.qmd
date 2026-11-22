@@ -1,0 +1,410 @@
+
+
+# Roman Borders
+This file pulls in Maps of Rome
+
+```{python}
+import requests
+from pathlib import Path
+
+# ArcGIS Feature Service
+base_url = (
+    "https://services1.arcgis.com/GWbDzXVIBphv2Dgx/"
+    "ArcGIS/rest/services/Roman_Empire_Cultural_Shapefiles/"
+    "FeatureServer"
+)
+
+# Output directory
+output_dir = Path.cwd() / "roman_boundaries"
+output_dir.mkdir(exist_ok=True)
+
+# Historical boundary layers
+boundary_layers = {
+    "roman_60_BC": 26,
+    "roman_14_AD": 33,
+    "roman_69_AD": 28,
+    "roman_117_AD": 35,
+    "roman_200_AD": 31,
+    "roman_314_AD": 30
+}
+
+# Download each boundary
+for name, layer_id in boundary_layers.items():
+
+    url = f"{base_url}/{layer_id}/query"
+
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "f": "geojson"
+    }
+
+    response = requests.get(url, params=params, timeout=120)
+    response.raise_for_status()
+
+    # Save GeoJSON
+    output_file = output_dir / f"{name}.geojson"
+
+    with open(output_file, "wb") as file:
+        file.write(response.content)
+
+    print(f"Downloaded: {output_file}")
+
+```
+
+```{python}
+
+
+
+# Inspect the metadata for potentially useful historical layers
+
+candidate_layers = [10, 15, 19, 20, 24, 26, 28, 30, 31, 33, 35]
+
+for layer_id in candidate_layers:
+
+    url = f"{base_url}/{layer_id}"
+
+    response = requests.get(
+        url,
+        params={"f": "json"},
+        timeout=60
+    )
+
+    response.raise_for_status()
+    layer = response.json()
+
+    print("\nLayer:", layer_id)
+    print("Name:", layer.get("name"))
+    print("Geometry:", layer.get("geometryType"))
+    print("Description:", layer.get("description"))
+    print("Fields:", [
+        field["name"] for field in layer.get("fields", [])
+    ])
+
+```
+
+
+
+# Roman Boundary Data Inspection
+
+
+```{python}
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# Locate the downloaded boundary files
+boundary_dir = Path.cwd() / "roman_boundaries"
+
+# Load each historical boundary
+roman_boundaries = {}
+
+for file in boundary_dir.glob("*.geojson"):
+
+    name = file.stem
+
+    gdf = gpd.read_file(file)
+
+    roman_boundaries[name] = gdf
+
+    print(f"\n{name}")
+    print("-" * 40)
+    print("Features:", len(gdf))
+    print("CRS:", gdf.crs)
+    print("Geometry types:", gdf.geom_type.value_counts().to_dict())
+    print("Columns:", gdf.columns.tolist())
+
+
+```
+
+## Inspect
+```{python}
+# Inspect the 117 AD boundary as an example
+empire_117 = roman_boundaries["roman_117_AD"]
+
+# Display the first few records
+display(empire_117.head())
+
+# Inspect the geographic extent
+print("Geographic bounds:")
+print(empire_117.total_bounds)
+
+# Check geometry validity
+print("\nInvalid geometries:")
+print((~empire_117.geometry.is_valid).sum())
+
+# Check for missing geometries
+print("\nMissing geometries:")
+print(empire_117.geometry.isna().sum())
+
+```
+
+
+## Maps
+
+```{python}
+# Create a 2 x 3 grid of maps
+fig, axes = plt.subplots(2, 3, figsize=(18, 11))
+
+axes = axes.flatten()
+
+for ax, (name, gdf) in zip(axes, roman_boundaries.items()):
+
+    gdf.plot(
+        ax=ax,
+        edgecolor="black",
+        linewidth=0.5
+    )
+
+    ax.set_title(name.replace("_", " ").upper())
+    ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Overlapping Borders
+```{python}
+fig, ax = plt.subplots(figsize=(16, 10))
+
+for name, gdf in roman_boundaries.items():
+
+    gdf.boundary.plot(
+        ax=ax,
+        linewidth=1,
+        label=name.replace("_", " ")
+    )
+
+ax.set_title("Roman Territorial Boundaries Across Historical Periods")
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.legend(loc="lower left")
+
+plt.show()
+
+
+```
+
+## Summary
+
+```{python}
+boundary_summary = []
+
+for name, gdf in roman_boundaries.items():
+
+    boundary_summary.append({
+        "boundary": name,
+        "features": len(gdf),
+        "geometry_types": ", ".join(gdf.geom_type.unique()),
+        "crs": str(gdf.crs),
+        "min_lon": gdf.total_bounds[0],
+        "min_lat": gdf.total_bounds[1],
+        "max_lon": gdf.total_bounds[2],
+        "max_lat": gdf.total_bounds[3],
+        "invalid_geometries": int((~gdf.geometry.is_valid).sum())
+    })
+
+boundary_summary_df = pd.DataFrame(boundary_summary)
+
+display(boundary_summary_df)
+
+```
+
+# More Maps "Roman Empire Map"
+```{python}
+
+# Roman Republican Boundaries: Additional Data Source
+
+import json
+
+# Source GeoJSON
+source_url = "https://tiles.romanempiremap.com/extents.geojson"
+
+# Save outside the roman_boundaries folder
+source_file = Path.cwd() / "roman_empire_map_extents_source.geojson"
+
+# Download source
+response = requests.get(source_url, timeout=120)
+response.raise_for_status()
+
+# Save original GeoJSON
+with open(source_file, "wb") as file:
+    file.write(response.content)
+
+print("Downloaded:", source_file)
+print("File size:", source_file.stat().st_size, "bytes")
+
+
+
+```
+
+## Inspect
+
+```{python}
+# Read the original GeoJSON
+
+with open(source_file, "r", encoding="utf-8") as file:
+    extent_data = json.load(file)
+
+# Inspect the structure
+print("GeoJSON type:", extent_data.get("type"))
+print("Total features:", len(extent_data["features"]))
+
+print("\nAvailable property fields:")
+
+print(
+    extent_data["features"][0]["properties"].keys()
+)
+
+print("\nFirst five features:")
+
+for feature in extent_data["features"][:5]:
+    print(feature["properties"])
+
+```
+
+## Load the GeoJSON features into a GeoDataFrame
+```{python}
+
+
+source_gdf = gpd.read_file(source_file)
+
+print("Total source features:", len(source_gdf))
+print("Available dates:", sorted(source_gdf["date"].unique()))
+
+# Select Republican-period boundaries
+republican_dates = [-264, -133, -44]
+
+republican_boundaries = source_gdf[
+    (source_gdf["date"].isin(republican_dates))
+    & (source_gdf["part"] == "whole")
+].copy()
+
+# Inspect selected boundaries
+display(
+    republican_boundaries[
+        ["date", "label", "method", "area_km2", "note", "geometry"]
+    ]
+)
+```
+
+## Save the Maps
+
+```{python}
+# Ensure output directory exists
+
+boundary_dir = Path.cwd() / "roman_boundaries"
+boundary_dir.mkdir(exist_ok=True)
+
+# Save each Republican boundary separately
+
+for _, row in republican_boundaries.iterrows():
+
+    # Convert date to filename
+    year = abs(int(row["date"]))
+
+    boundary_name = f"roman_{year}_BC"
+
+    # Create a single-feature GeoDataFrame
+    boundary_gdf = gpd.GeoDataFrame(
+        [row],
+        geometry="geometry",
+        crs=republican_boundaries.crs
+    )
+
+    # Standardize CRS
+    boundary_gdf = boundary_gdf.to_crs("EPSG:4326")
+
+    # Save GeoJSON
+    output_file = boundary_dir / f"{boundary_name}.geojson"
+
+    boundary_gdf.to_file(
+        output_file,
+        driver="GeoJSON"
+    )
+
+    print("Saved:", output_file)
+
+```
+
+#
+```{python}
+# Load all historical boundaries
+
+roman_boundaries = {}
+
+for file in boundary_dir.glob("*.geojson"):
+
+    name = file.stem
+
+    gdf = gpd.read_file(file)
+
+    roman_boundaries[name] = gdf
+
+    print(
+        name,
+        "| Features:", len(gdf),
+        "| CRS:", gdf.crs,
+        "| Geometry:", gdf.geom_type.unique()
+    )
+```
+
+# Final Maps
+
+```{python}
+# Create a 3 x 3 grid of maps
+fig, axes = plt.subplots(3, 3, figsize=(18, 16))
+
+axes = axes.flatten()
+
+for ax, (name, gdf) in zip(axes, roman_boundaries.items()):
+
+    gdf.plot(
+        ax=ax,
+        edgecolor="black",
+        linewidth=0.5,
+        facecolor="#D9E2EC"
+    )
+
+    ax.set_title(name.replace("_", " ").upper())
+    ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Overlapping Borders
+
+```{python}
+fig, ax = plt.subplots(figsize=(16, 10))
+
+for name, gdf in roman_boundaries.items():
+
+    gdf.boundary.plot(
+        ax=ax,
+        linewidth=1,
+        label=name.replace("_", " ")
+    )
+
+ax.set_title(
+    "Roman Territorial Boundaries Across Historical Periods",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+
+ax.legend(
+    loc="lower left",
+    fontsize=8
+)
+
+plt.tight_layout()
+plt.show()
+
+```
