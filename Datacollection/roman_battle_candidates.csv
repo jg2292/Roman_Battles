@@ -46,7 +46,7 @@ Q12273303,Battle of Noviodunum,369 battle,+0369-00-00T00:00:00Z,['Q3373059'],,,[
 Q12273317,Battle of Serdica,261 battle,+0261-00-00T00:00:00Z,['Q4067160'],,,['Q329838'],"['Q2277', 'Q2277']",['Q178561'],
 Q1230563,Battle of the Colline Gate,82 BCE battle,-0082-11-01T00:00:00Z,['Q1747689'],41.907222,12.498611,"['Q1747183', 'Q521868']",[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_the_Colline_Gate
 Q1231684,Battle of Châlons,274 battle between the Roman and Gallic empires,+0274-00-00T00:00:00Z,"['Q47135', 'Q2955921']",48.9575,4.365,['Q116860805'],['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Ch%C3%A2lons_%28274%29
-Q1231697,Driving car,battle,+0363-06-00T00:00:00Z,['Q170047'],,,['Q1229305'],[],"['Q178561', 'Q680838']",https://en.wikipedia.org/wiki/Battle_of_Samarra_%28363%29
+Q1231697,Battle of Samarra,battle,+0363-06-00T00:00:00Z,['Q170047'],,,['Q1229305'],[],"['Q178561', 'Q680838']",https://en.wikipedia.org/wiki/Battle_of_Samarra_%28363%29
 Q123860936,Battle of Mons Colubrarius,,+0438-00-00T00:00:00Z,[],,,['Q122421806'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Mons_Colubrarius
 Q124430082,Battle of Calama,battle between West Roman Empire and Vandals,+0430-05-00T00:00:00Z,['Q17513228'],,,['Q11789247'],"['Q42211', 'Q42834']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Calama
 Q125497957,Yawm al-Nakhla,3rd century armed conflict,+0280-00-00T00:00:00Z,['Q12250654'],,,[],"['Q289577', 'Q2502723']",['Q178561'],https://en.wikipedia.org/wiki/Yawm_al-Nakhla
@@ -154,7 +154,7 @@ Q1707087,Battle of the Bridges,inconclusive battle in Germania between the Roman
 Q1711032,Han conquest of Nanyue,military conflict,-0111-00-00T00:00:00Z,[],,,"['Q28710139', 'Q1072949']",[],['Q178561'],https://en.wikipedia.org/wiki/Han_conquest_of_Nanyue
 Q17277303,Battle of Halys,"battle between the Roman Republic and the Kingdom of Pontus, 82 BCE",-0082-00-00T00:00:00Z,['Q257785'],41.734444,35.956389,['Q1991765'],"['Q17167', 'Q7380487']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Halys
 Q17374942,Battle of Bergium,,-0195-00-00T00:00:00Z,['Q15487'],42.1,1.84556,['Q11945466'],[],['Q178561'],
-Q17515447,Battle of Carnuntum,battle during the Marcomannic Wars (170),+0170-00-00T00:00:00Z,['Q508815'],,,['Q933963'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Carnuntum
+Q17515447,Battle of Carnuntum,170 CE battle during the Marcomannic Wars,+0170-00-00T00:00:00Z,['Q508815'],,,['Q933963'],"['Q2277', 'Q209851']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Carnuntum
 Q1753340,Battle of Wuzhang Plains,military conflict between Cao Wei and Shu Han (234),+0234-00-00T00:00:00Z,['Q2714372'],34.35,107.383333,['Q185043'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Wuzhang_Plains
 Q17591666,Battle between the Hermunduri and the Chatti,58 battle,+0058-00-00T00:00:00Z,['Q62646'],,,[],"['Q685693', 'Q164076']",['Q178561'],https://en.wikipedia.org/wiki/Battle_between_the_Hermunduri_and_the_Chatti
 Q1759500,Battle of Lingones,298 battle during the Roman-Germanic wars (298),+0298-00-00T00:00:00Z,[],47.85,5.333333,[],['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Lingones
@@ -318,14 +318,14 @@ Q3270429,Battle of Julu,"207 BCE battle between Qin and Chu,battle",-0207-00-00T
 Q3271041,Battle of Canhe Slope,395 battle in China,+0395-12-08T00:00:00Z,['Q922785'],,,['Q683551'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Canhe_Slope
 Q3271565,Battle of Baideng,200 BCE battle,-0200-00-00T00:00:00Z,['Q15923520'],,,['Q744969'],"['Q188836', 'Q7209']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Baideng
 Q3272217,Battle of Kunyang,battle between Wang Mang and Liu Xiu in 23 AD,+0023-00-00T00:00:00Z,['Q1337567'],33.62694444444445,113.35694444444444,['Q1469307'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Kunyang
-Q339321,Battle of the Milvian Bridge,4th-century battle for control of Rome,+0312-10-28T00:00:00Z,['Q1127325'],41.935555555556,12.466944444444,['Q759835'],['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_the_Milvian_Bridge
+Q339321,Battle of the Milvian Bridge,312 battle for control of Rome,+0312-10-28T00:00:00Z,['Q1127325'],41.935555555556,12.466944444444,['Q759835'],"['Q2277', 'Q2277']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_the_Milvian_Bridge
 Q3467874,Siege of Jicheng,part of campaign by Ma Chao to retake Liang Province (213),+0213-00-00T00:00:00Z,['Q1201599'],34.73969,105.3297,[],[],"['Q188055', 'Q178561']",https://en.wikipedia.org/wiki/Siege_of_Jicheng
 Q3491975,Battle of Cremona,battle in the Roman–Gallic wars,-0200-00-00T00:00:00Z,['Q6231'],45.133333,10.033333,['Q3417663'],"['Q451220', 'Q11905413']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Cremona_%28200_BC%29
 Q3494883,Battle of Sarmisegetusa,"Roman siege of Sarmizegetusa, the capital of Dacia (106)",+0106-00-00T00:00:00Z,['Q739802'],45.6219,23.3093,['Q2078442'],"['Q2277', 'Q173082']","['Q188055', 'Q178561']",https://en.wikipedia.org/wiki/Battle_of_Sarmizegetusa
 Q3496783,Battle of Beth Horon,battle between Judean rebels and the Syrian Legion of the Roman Empire,+0066-00-00T00:00:00Z,['Q1268514'],31.8858,35.1142,['Q202578'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Beth_Horon_%2866%29
 Q3498428,Battle of Mount Gindarus,battle of Mount Gindarus,-0038-00-00T00:00:00Z,['Q950797'],36.394722,36.688889,['Q55630237'],['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Mount_Gindarus
 Q3502194,Battle of Placentia,military engagement between the Romans and the Boii,-0194-00-00T00:00:00Z,[],45.033333,9.7,['Q3417663'],[],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Placentia_%28194_BC%29
-Q3555607,Battle of Ecbatana,129 BCE battle between Seleucids and Parthians,-0129-00-00T00:00:00Z,['Q696193'],4.7961,48.5158,['Q4207759'],"['Q93180', 'Q1986139']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Ecbatana
+Q3555607,Battle of Ecbatana,129 BCE battle between Seleucids and Parthians,-0129-00-00T00:00:00Z,['Q696193'],4.7961,48.5158,['Q4207759'],"['Q93180', 'Q1986139']",['Q178561'],https://en.wikipedia.org/wiki/Parthian_campaign_of_Antiochus_VII
 Q3623158,Battle of Faesulae,battle during the Roman-Gaulish Wars (225 BC),-0225-00-00T00:00:00Z,['Q82670'],43.460278,12.386389,['Q3417663'],['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Faesulae_%28225_BC%29
 Q3636241,Battle of Mount Tabor,67 battle,+0067-09-00T00:00:00Z,['Q193785'],32.687113888889,35.390383333333,['Q202578'],[],['Q178561'],
 Q3636258,Battle of the Erac River,375 battle,+0375-00-00T00:00:00Z,['Q321371'],,,[],"['Q1400317', 'Q45813']",['Q178561'],
@@ -569,7 +569,7 @@ Q968551,Battle of Mount Scorobas,battle,-0088-00-00T00:00:00Z,[],41.116667,30.63
 Q971507,Battle of Zela,47 BCE battle of Julius Caesar's Pontic Campaign,-0047-06-01T00:00:00Z,['Q203018'],40.3,35.88333333,"['Q1238338', 'Q18408280']",['Q1747689'],['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Zela_%2847_BC%29
 Q97177627,Battle of Aphrodisium,"battle, c. 238 BCE",-0238-00-00T00:00:00Z,['Q12824780'],,,[],"['Q2022162', 'Q93180', 'Q11073103']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Aphrodisium
 Q97178128,Battle of Kroton,,-0277-00-00T00:00:00Z,['Q6681'],,,['Q596373'],[],['Q178561'],
-Q97185084,Battle of Asophon,103 BCE battle,-0103-00-00T00:00:00Z,['Q83241'],,,['Q97186072'],"['Q28478026', 'Q10359001']",['Q178561'],
+Q97185084,Battle of Asophon,103 BCE battle,-0103-00-00T00:00:00Z,['Q83241'],,,['Q97186072'],"['Q28478026', 'Q10359001']",['Q178561'],https://en.wikipedia.org/wiki/Battle_of_Asophon
 Q97186852,Battle of Alabanda,,-0197-00-00T00:00:00Z,['Q778224'],,,['Q75665'],"['Q43048', 'Q83958']",['Q178561'],
 Q97196370,Battle of Selge,,-0218-00-00T00:00:00Z,['Q769197'],,,[],[],['Q178561'],
 Q97196380,Battle of Sparta,218 BCE battle during the 220-217 BCE Social War,-0218-00-00T00:00:00Z,['Q5690'],,,['Q1006077'],[],['Q178561'],

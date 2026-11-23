@@ -9,7 +9,7 @@ authors:
 df-print: kable
 bibliography: GIS_Manuscript.bib
 csl: chicago-17-no-url.csl
-title-block-banner: "#E69F0095"
+title-block-banner: "#8B1E2D"
 title-block-banner-color: "black"
 date: today
 abstract: |
@@ -77,6 +77,9 @@ Each battle is assigned to one of two classifications:
 Battle locations are represented using geographic coordinates and converted into spatial point geometries for subsequent analysis. Because individual battles may have multiple associated location records, the analysis distinguishes between battle-location records and unique battles. Analyses using multiple location records retain the associated geographic observations, while the later classification-based nearest neighbor analysis constructs one representative point per unique battle.
 
 
+![Geographic distribution of recorded Roman battles, showing the study area and the Roman Empire at its maximum extent in 117 AD.](visualization/01_observed_battle_locations.png){#fig-battle-locations}
+
+
 ## Historical Roman Territorial Boundaries
 
 Historical Roman territorial boundaries were collected to represent the changing geographic extent of Roman control across nine historical periods. Boundary reconstructions were obtained from two online geographic data sources: the *Roman Empire Cultural Shapefiles* ArcGIS Feature Service and the *Roman Empire Map* project.
@@ -140,11 +143,11 @@ The direction of the Monte Carlo test depends on the research question. Lower-ta
 
 For a lower-tail test, the empirical Monte Carlo p-value is calculated as:
 
-\[
+$$
 p = \frac{b+1}{R+1}
-\]
+$$
 
-where \(b\) is the number of simulated statistics less than or equal to the observed statistic and \(R\) is the number of simulations. For two-sided tests, the p-value is calculated by doubling the smaller of the two empirical tail probabilities, with a maximum value of 1.
+where $b$ is the number of simulated statistics less than or equal to the observed statistic and $R$ is the number of simulations. For two-sided tests, the p-value is calculated by doubling the smaller of the two empirical tail probabilities, with a maximum value of 1.
 
 With 999 simulations, the minimum attainable p-value is 0.001 for a one-sided test and 0.002 for the two-sided procedure. P-values are interpreted as evidence of differences between the observed and simulated spatial statistics rather than as measures of the probability that a particular historical explanation is true.
 
@@ -184,14 +187,14 @@ A complementary set of simulations uses exponential distance-decay functions to 
 
 Second, boundary-weighted spatial distributions are constructed using exponential distance decay:
 
-\[
+$$
 w(d) = e^{-d/\lambda}
-\]
+$$
 
 where:
 
-- \(d\) is the distance from a grid cell to the corresponding territorial perimeter.
-- \(\lambda\) is the distance-decay parameter.
+- $d$ is the distance from a grid cell to the corresponding territorial perimeter.
+- $\lambda$ is the distance-decay parameter.
 
 Four decay distances are evaluated:
 
@@ -230,11 +233,11 @@ The analysis first consolidates multiple location records belonging to the same 
 
 A shared 20 km sampling grid is constructed across the study area. For each grid cell, the distance to the nearest relevant infrastructure location is calculated. These distances are converted into sampling weights using an exponential distance-decay function:
 
-\[
+$$
 w(d) = e^{-(d-d_{\min})/\lambda}
-\]
+$$
 
-where \(d\) represents the distance from a grid cell to the nearest relevant infrastructure feature, \(d_{\min}\) is the minimum distance across the sampling grid, and \(\lambda\) is the distance-decay parameter. Subtracting the minimum distance ensures that the highest sampling weight is 1. Smaller decay parameters concentrate simulated locations more strongly around the selected infrastructure, while larger parameters produce broader spatial distributions.
+where $d$ represents the distance from a grid cell to the nearest relevant infrastructure feature, $d_{\min}$ is the minimum distance across the sampling grid, and $\lambda$ is the distance-decay parameter. Subtracting the minimum distance ensures that the highest sampling weight is 1. Smaller decay parameters concentrate simulated locations more strongly around the selected infrastructure, while larger parameters produce broader spatial distributions.
 
 Four decay parameters are evaluated: 25, 50, 100, and 200 km. For each parameter, 999 simulations are generated using the corresponding infrastructure-weighted sampling distribution. Each simulated classification contains the same number of unique battles as its observed group: 252 external battles and 80 civil conflicts. Simulated locations are sampled from the weighted grid, with a small amount of spatial jitter applied within each grid cell to avoid placing all simulated points at identical cell locations.
 
@@ -254,21 +257,24 @@ The observed distribution of Roman battle locations exhibited substantially grea
 
 None of the 999 simulated CSR distributions produced a mean nearest-neighbor distance as extreme as the observed value. The resulting Monte Carlo p-value was 0.001, providing strong evidence against the hypothesis that battle locations were randomly distributed across the study area.
 
-Figure @fig-spatial-randomness-distribution shows the distribution of simulated mean nearest-neighbor distances under CSR, with the observed statistic indicated by a vertical reference line. The position of the observed value relative to the simulated distribution illustrates the degree to which battle locations were more spatially concentrated than expected under a random spatial process.
+@fig-spatial-randomness-distribution shows the distribution of simulated mean nearest-neighbor distances under CSR, with the observed statistic indicated by a vertical reference line. The position of the observed value relative to the simulated distribution illustrates the degree to which battle locations were more spatially concentrated than expected under a random spatial process.
 
-![Distribution of simulated mean nearest-neighbor distances under complete spatial randomness, with the observed statistic indicated by a vertical reference line.](figures/spatial_randomness_distribution.png){#fig-spatial-randomness-distribution}
+![Distribution of simulated mean nearest-neighbor distances under complete spatial randomness, with the observed statistic indicated by a vertical reference line.](visualization/spatial_randomness_distribution.png){#fig-spatial-randomness-distribution}
 
 ## Settlement Based Models
 
+![Settlement intensity surface generated from the full Pleiades settlement dataset.](visualization/17_pleiades_settlement_intensity_full_dataset.png){#fig-pleiades-settlement-intensity}
+
  Across the full historical dataset of battle-location records, the observed mean nearest-neighbor distance was 41.59 km, compared with an expected mean distance of 70.54 km under the settlement-based model. The observed-to-expected ratio was 0.590, indicating that the observed mean distance was approximately 41.0% lower than expected based on settlement geography an improvement over the complete spatial randomness model, but spatial clustering of battle locations persisted even after accounting for the distribution of known settlements.
 
-![Distribution of simulated mean nearest-neighbor distances under the settlement-based model, with the observed statistic indicated by a vertical reference line.](figures/settlement_distribution.png){#fig-settlement-distribution}
+
+![Observed and settlement-simulated battle locations](visualization/settlement_distribution.png){#fig-settlement-comparison}
 
 ### Border Distance Investigation
 
 The border-distance investigation evaluated whether battle locations were closer to historical Roman territorial boundaries than expected based on the geographic distribution of known settlements. Across the 342 battle-location records, the observed mean distance to the nearest border was 139.63 km, compared with an expected mean distance of 288.93 km under the settlement intensity model. The observed-to-expected ratio was 0.483, indicating that battles occurred approximately 51.7% closer to territorial boundaries than expected based on settlement geography. None of the 999 simulations produced a mean distance as small as the observed value, suggesting that the relationship between battle locations and Roman territorial boundaries warranted further investigation beyond the influence of settlement distribution alone.
 
-![Distribution of simulated mean distances to the nearest Roman territorial boundary under the settlement-intensity model, with the observed mean distance indicated by a vertical reference line.](figures/border_distance_distribution.png){#fig-border-distance-distribution}
+![Distribution of simulated mean distances to the nearest Roman territorial boundary under the settlement-intensity model, with the observed mean distance indicated by a vertical reference line.](visualization/borderdistance.png){#fig-border-distance-distribution}
 
 ## Border Based Model
 
@@ -280,7 +286,12 @@ In contrast to the settlement-based model, which found that battle locations wer
 
 This exploratory comparison does not establish that battles were caused by, or deliberately positioned near, territorial boundaries. However, the differences across decay parameters suggest that the relationship between Roman territorial boundaries and battle locations warrants further investigation.
 
-![Observed mean distance to the nearest historical boundary compared with simulated distributions under four distance-decay parameters.](figures/border_distance_decay.png){#fig-border-distance-decay}
+
+![Observed mean distance to historical Roman territorial boundaries across the historical periods.](visualization/15_observed_border_distances_by_period.png){#fig-border-periods}
+
+
+![Border-weighted simulation distributions under four distance-decay assumptions](visualization/bordermodel.png){#fig-border-simulations}
+
 
 ### Civil versus External Conflict
 
@@ -303,6 +314,10 @@ These results suggest that the spatial relationship between Roman territorial bo
 ### Battle Proximity to Specialized Settlement Features
 
 To examine whether battle locations were unusually close to particular types of settlement infrastructure, four feature categories were evaluated: ports, temples, forts, and entertainment facilities (amphitheatres and theatres). The analysis included 99 port locations, 54 temple locations, 50 fort locations, and 89 entertainment locations. Results were evaluated separately for civil conflicts and external battles.
+
+@fig-infrastructure-map shows the observed battle locations alongside the specialized settlement infrastructure used in the analysis.
+
+![Roman battle locations and specialized settlement infrastructure, including ports, temples, forts, and entertainment facilities.](visualization/16_combined_infrastructure_map.png){#fig-infrastructure-map}
 
 #### Civil Conflicts
 
@@ -332,7 +347,7 @@ Ports and forts displayed contrasting patterns across the two classifications. C
 
 Temples produced the least conclusive results. Neither classification showed evidence of unusually close proximity at the 0.05 significance threshold, although the external-battle result approached that threshold.
 
-Table @tbl-feature-proximity summarizes the observed and simulated distances for all eight comparisons. Figure @fig-feature-proximity shows the simulated distributions alongside the observed and expected mean distances.
+@tbl-feature-proximity summarizes the observed and simulated distances for all eight comparisons. Figure @fig-feature-proximity shows the simulated distributions alongside the observed and expected mean distances.
 
 | Feature category | Classification | Battle locations | Feature locations | Observed mean (km) | Expected mean (km) | Ratio | Lower-tail p-value |
 |:---|:---|---:|---:|---:|---:|---:|---:|
@@ -347,7 +362,6 @@ Table @tbl-feature-proximity summarizes the observed and simulated distances for
 
 : Observed and simulated mean distances between battle locations and specialized settlement features. {#tbl-feature-proximity}
 
-![Simulated distributions of mean distance to the nearest specialized settlement feature, separated by battle classification. Vertical lines indicate observed and expected mean distances.](visualization/battle_feature_proximity.png){#fig-feature-proximity}
 
 These findings suggest that the relationship between Roman battles and settlement infrastructure varied by conflict classification and feature type. Civil conflicts were particularly close to entertainment facilities and ports, while external battles were closer than expected to entertainment facilities and forts. These patterns are consistent with different spatial relationships between the two types of conflict and the surrounding settlement landscape, although they do not establish that these features directly influenced where battles occurred.
 
@@ -383,7 +397,7 @@ Overall, the results indicate that the relationship between infrastructure-weigh
 
 The 25 km infrastructure model also produced the closest correspondence with the observed clustering of all battles combined. However, this result should be interpreted in the context of the classification-specific simulations: the combined model joins separately simulated external battles weighted toward forts and civil conflicts weighted toward entertainment facilities. It therefore represents a combination of two infrastructure-weighted distributions rather than a single probability surface.
 
-Table @tbl-infrastructure-model summarizes the observed and simulated mean nearest-neighbor distances across the general settlement and infrastructure-weighted models.
+@tbl-infrastructure-model summarizes the observed and simulated mean nearest-neighbor distances across the general settlement and infrastructure-weighted models.
 
 | Model | Classification | Observed mean (km) | Expected mean (km) | Ratio | 2.5th percentile (km) | 97.5th percentile (km) | Two-sided p-value |
 |:---|:---|---:|---:|---:|---:|---:|---:|
@@ -405,28 +419,47 @@ Table @tbl-infrastructure-model summarizes the observed and simulated mean neare
 
 : Comparison of observed and simulated mean nearest-neighbor distances across settlement and infrastructure-weighted models. {#tbl-infrastructure-model}
 
-Figure @fig-infrastructure-distributions shows the distributions of simulated mean nearest-neighbor distances for the general settlement model and the four infrastructure-weighted models. The observed mean nearest-neighbor distance is shown for each classification. The distributions illustrate how changing the infrastructure distance-decay parameter affects the expected spatial clustering of simulated battles.
 
-![Simulated mean nearest-neighbor distance distributions for the general settlement model and four infrastructure-weighted models, separated by battle classification.](figures/infrastructure_simulation_distributions.png){#fig-infrastructure-distributions}
-
-### Representative Spatial Simulations
+![Observed-to-expected ratios across the settlement and infrastructure-weighted spatial models.](visualization/19_final_model_observed_expected_ratios.png){#fig-infrastructure-ratios}
 
 
-Figure @fig-representative-infrastructure compares the observed battle locations with the representative 25 km infrastructure-weighted simulations for external battles and civil conflicts. This comparison provides a geographic complement to the summary nearest-neighbor statistics, allowing the spatial configurations produced by the model to be examined alongside the observed distribution.
+![Expected mean nearest-neighbor distances across settlement and infrastructure-weighted spatial models, separated by conflict classification.](visualization/20_final_model_expected_distances.png){#fig-infrastructure-distances}
 
-![Observed battle locations and representative 25 km infrastructure-weighted simulations for external battles and civil conflicts.](figures/representative_infrastructure_simulations.png){#fig-representative-infrastructure}
 
-The simulation results demonstrate that infrastructure-weighted distributions can reproduce some aspects of the observed spatial clustering, but their correspondence varies by conflict classification and distance-decay assumption. The results do not establish that battles were caused by, or deliberately positioned near, forts or entertainment facilities. Rather, they suggest that the spatial relationship between battle locations and different forms of infrastructure merits further investigation.
+
+![Observed battle locations and infrastructure-weighted spatial models, separated by conflict classification .](visualization/FinalModel.png){#fig-representative-infrastructure}
+
+
 
 # Conclusion
 
-The spatial analyses identify several distinct patterns in the geographic distribution of Roman battles. Battle locations exhibit substantial clustering relative to a uniform random distribution, and this clustering remains apparent when settlement geography is incorporated as a base model. Battles are also significantly closer to historical Roman territorial boundaries than expected under the settlement based model. Finally, the infrastructure analysis suggests that the relationship between military activity and specialized settlement features differs between external and civil conflicts.
+This study examined the spatial geography of Roman warfare by evaluating the relationship between battle locations, settlement patterns, territorial boundaries, and specialized infrastructure. Using battle-location records across multiple historical periods, the analysis applied spatial statistical methods and Monte Carlo simulations to investigate whether the distribution of Roman battles could be explained by broader geographic patterns. The results indicate that Roman battles were not distributed randomly across the study area. Instead, their locations exhibited substantial spatial clustering, and this clustering persisted when the distribution of documented settlements was incorporated into the statistical models.
 
+The settlement-based analysis demonstrated that the geography of known settlements provided a better explanation for the distribution of battles than spatial randomness alone. However, the model still fell short of reproducing the observed clustering. The expected mean nearest-neighbor distance decreased substantially when settlement geography was incorporated, but remained considerably higher than the observed distance. This suggests that settlement geography provides an important baseline for understanding the distribution of Roman battles, but does not fully account for the factors associated with their spatial concentration.
 
-## Interpretation
+The territorial-boundary analysis identified another important spatial relationship. Battle locations were, on average, substantially closer to historical Roman territorial boundaries than expected under the settlement-conditioned model. However, the border-weighted simulations revealed that the strength of this relationship depended on the assumed distance-decay parameter. The broadest model, using a 200 km decay distance, produced the closest correspondence with the observed overall mean distance. This suggests that the geographic relationship between warfare and Roman territorial boundaries was not necessarily limited to engagements immediately adjacent to the frontier. Rather, the results are consistent with a broader zone of military activity surrounding the territorial limits of Roman control.
 
-Taken together, these simulations suggest that the general settlement distribution alone does not reproduce the observed degree of battle clustering. The infrastructure-weighted models provide a more specific comparison, showing that the relationship between infrastructure proximity and battle clustering depends on both the type of conflict and the assumed distance-decay parameter.
+The classification-based results further demonstrate that external and civil conflicts exhibited different spatial relationships with Roman territorial boundaries. External battles remained farther from the boundaries than expected under each of the four border-weighted models, while the civil-conflict results were more closely reproduced by the broader decay assumptions. This finding differed from the initial expectation that external conflicts would exhibit the strongest relationship with territorial boundaries. Instead, the results suggest that combining all Roman battles into a single spatial distribution can obscure meaningful variation in the geography of different types of conflict.
 
-The 25 km infrastructure model produced the closest overall correspondence between observed and simulated clustering, particularly when all battles were combined. However, this aggregate result conceals differences between the two classifications: the observed external battles were less clustered than the fort-weighted simulation, while civil conflicts were more clustered than the entertainment-weighted simulation.
+The infrastructure analysis provides additional evidence of these differences. Civil conflicts exhibited particularly strong proximity to entertainment facilities and ports relative to the broader settlement geography. External battles, in contrast, were unusually close to forts and entertainment facilities, while showing no evidence of unusually close proximity to ports. The classification-based nearest-neighbor simulations also demonstrated that the relationship between infrastructure and battle clustering varied according to the assumed distance-decay parameter. The 25 km infrastructure model produced the closest correspondence with the observed clustering of all battles combined, although this aggregate result concealed differences between the two classifications. External battles were less tightly clustered than the fort-weighted simulations under the narrowest decay assumption, while civil conflicts remained more tightly clustered than their entertainment-weighted simulations.
 
-These findings provide evidence that settlement infrastructure may help characterize the spatial distribution of Roman battles, but they do not establish that forts or entertainment facilities directly determined battle locations. The results are conditional on the selected features, KDE and sampling-grid parameters, and the assumed distance-decay functions. The comparisons are also exploratory and involve multiple model tests.
+Taken together, the findings suggest that the spatial geography of Roman warfare is more complicated than any single model in this study can explain. The analyses provide evidence against complete spatial randomness and demonstrate that settlement geography improves upon a uniform random baseline. However, settlement geography alone does not reproduce the observed concentration of battles. Territorial boundaries and specialized infrastructure offer additional ways of characterizing this distribution, but their explanatory value varies across historical periods, conflict classifications, and model assumptions.
+
+Rather than identifying one definitive geographic explanation for where Roman battles occurred, this study highlights the limitations of treating military activity as the product of a single spatial relationship. The results suggest that Roman warfare was associated with several overlapping geographic structures, but that the importance of these structures differed depending on the type and historical context of the conflict. This leaves open considerable opportunities for further research into the geographic, political, and strategic factors underlying the distribution of Roman military engagements.
+
+## Limitations and Future Research
+
+### Limitations
+
+Several limitations should be considered when interpreting these findings. First, the battle dataset is dependent on the availability and geographic precision of historical records and their representation in Wikidata. The resulting sample is therefore not a complete inventory of all Roman military engagements. A cursory look at the battle mappings of the different historical time period shows centuries where there appear to be only a few battles recorded most likely due to limited sources as opposed to those being true times of peace.  
+
+This leads to next limitation, the historical boundary reconstructions provide snapshots of Roman territorial extent rather than continuous representations of political control. This is particularly important for the time period of the Roman republic when the borders of the empire rapidly changed.  This may have meaningfully impacted the border analysis done in this research.
+ 
+
+### Future Research
+
+The amount of future research opportunities are as exciting as they are plenty.  The most obvious continuation would be to incorporate geographical features such as rivers, mountains, and more into this research.  Any traditional study of military history will include a lot many mentions of river crossings or mountain passes where decisive battles take place, so pulling in that information would bring this quantitative research in closer proximity to the shoulders of giants studying Roman history.
+
+Expanding the temporal range of the study would also bring in existing new possibilities.  This study of battles ends slightly after the fall of the Western Roman Empire, but futher study could be done to include the campaigns of Belisarius where the Eastern Roman Empire retook North Africa and Italy all the way until the fall of Constantinople to Mehmed II.
+
+The most exciting potential area of expansion, would be to pull in details of the battles or wars themselves through additional data on WikiData and Wikipedia.  Using linked articles of the battles to pull in additional context either through network analysis or NLP on the articles itself.  This would allow for a finer grain distinction than the civil versus external conflict in this study and would allow for groupings of conflicts based on numerous factors. 

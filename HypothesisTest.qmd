@@ -73,6 +73,33 @@ print(battle_locations_df.columns.tolist())
 print("\nSettlement columns:")
 print(settlements_gdf.columns.tolist())
 
+visualization_dir = project_root / "visualization"
+images_dir = project_root / "images"
+tables_dir = project_root / "tables"
+
+for folder in [visualization_dir, images_dir, tables_dir]:
+    folder.mkdir(parents=True, exist_ok=True)
+
+# 
+
+# --------------------------------------------------
+# 2. Roman-inspired color palette
+# --------------------------------------------------
+
+ROMAN = {
+    "parchment": "#F5F1E8",
+    "navy": "#041E42",
+    "red": "#8B1E2D",
+    "gold": "#C6A15B",
+    "stone": "#A6A198",
+    "light_blue": "#B8C9D9",
+    "teal": "#52796F",
+    "dark": "#292724",
+    "white": "#FFFFFF"
+}
+
+# 
+
 def save_figure(fig, folder, filename):
     """
     Save a figure as a high-resolution PNG
@@ -747,6 +774,13 @@ ax.set_ylabel("Density")
 ax.legend()
 
 plt.tight_layout()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "spatial_randomness_distribution.png"
+)
+
 plt.show()
 
 ```
@@ -1273,7 +1307,12 @@ ax.set_ylabel("Density")
 ax.legend()
 
 plt.tight_layout()
-plt.show()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "settlement_distribution.png"
+)
 ```
 
 ### Calculate the Monte Carlo p-value
@@ -1973,7 +2012,12 @@ ax.legend()
 ax.spines[["top", "right"]].set_visible(False)
 
 plt.tight_layout()
-plt.show()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "border_distance_distribution.png"
+)
 
 ```
 
@@ -2390,7 +2434,12 @@ ax.legend()
 ax.spines[["top", "right"]].set_visible(False)
 
 plt.tight_layout()
-plt.show()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "border_distance_decay.png"
+)
 
 ```
 
@@ -4069,7 +4118,15 @@ for ax, category in zip(axes, categories):
     ax.legend()
 
 plt.tight_layout()
+plt.savefig(
+    "../visualization/infrastructure_simulation_distributions.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
 plt.show()
+
+
 
 ```
 

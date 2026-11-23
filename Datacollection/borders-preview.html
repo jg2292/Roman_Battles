@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+    <meta charset="utf-8">
+    <meta name="generator" content="quarto-1.5.54">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+    <title>borders</title>
+    <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      div.columns{display: flex; gap: min(4vw, 1.5em);}
+      div.column{flex: auto; overflow-x: auto;}
+      div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+      ul.task-list{list-style: none;}
+      ul.task-list li input[type="checkbox"] {
+        width: 0.8em;
+        margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+        vertical-align: middle;
+      }
+    </style>
+
+    <style>
+      body.hypothesis-enabled #quarto-embed-header {
+        padding-right: 36px;
+      }
+
+      #quarto-embed-header {
+        height: 3em;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: solid 1px;
+      }
+
+      #quarto-embed-header h6 {
+        font-size: 1.1em;
+        padding-top: 0.6em;
+        margin-left: 1em;
+        margin-right: 1em;
+        font-weight: 400;
+      }
+
+      #quarto-embed-header a.quarto-back-link,
+      #quarto-embed-header a.quarto-download-embed {
+        font-size: 0.8em;
+        margin-top: 1em;
+        margin-bottom: 1em;
+        margin-left: 1em;
+        margin-right: 1em;
+      }
+
+      .quarto-back-container {
+        padding-left: 0.5em;
+        display: flex;
+      }
+
+      .headroom {
+          will-change: transform;
+          transition: transform 200ms linear;
+      }
+
+      .headroom--pinned {
+          transform: translateY(0%);
+      }
+
+      .headroom--unpinned {
+          transform: translateY(-100%);
+      }      
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script><script>
+    window.document.addEventListener("DOMContentLoaded", function () {
+
+      var header = window.document.querySelector("#quarto-embed-header");
+      const titleBannerEl = window.document.querySelector("body > #title-block-header");
+      if (titleBannerEl) {
+        titleBannerEl.style.paddingTop = header.clientHeight + "px";
+      }
+      const contentEl = window.document.getElementById('quarto-content');
+      for (const child of contentEl.children) {
+        child.style.paddingTop = header.clientHeight + "px";
+        child.style.marginTop = "1em";
+      }
+
+      // Use the article root if the `back` call doesn't work. This isn't perfect
+      // but should typically work
+      window.quartoBackToArticle = () => {
+        var currentUrl = window.location.href;
+        window.history.back();
+        setTimeout(() => {
+            // if location was not changed in 100 ms, then there is no history back
+            if(currentUrl === window.location.href){              
+                // redirect to site root
+                window.location.href = "...html";
+            }
+        }, 100);
+      }
+
+      const headroom = new window.Headroom(header, {
+        tolerance: 5,
+        onPin: function () {
+        },
+        onUnpin: function () {
+        },
+      });
+      headroom.init();
+    });
+    </script>
+
+    
+<script src="../site_libs/manuscript-notebook/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-html/quarto.js"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<script src="../site_libs/quarto-contrib/glightbox/glightbox.min.js"></script>
+<link href="../site_libs/quarto-contrib/glightbox/glightbox.min.css" rel="stylesheet">
+<link href="../site_libs/quarto-contrib/glightbox/lightbox.css" rel="stylesheet">
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>  
+        <link rel="stylesheet" href="../style.css">
+      </head>
+
+  <body class="quarto-notebook">
+    <div id="quarto-embed-header" class="headroom fixed-top bg-primary">
+      
+      <a onclick="window.quartoBackToArticle(); return false;" class="btn btn-primary quarto-back-link" href=""><i class="bi bi-caret-left"></i> Back to Article</a>
+      <h6><i class="bi bi-journal-code"></i> Roman Borders</h6>
+
+            <a href="../Datacollection/borders.qmd" class="btn btn-primary quarto-download-embed" download="borders.qmd">Download Source</a>
+          </div>
+
+     <header id="title-block-header" class="quarto-title-block default toc-left page-columns page-full">
+  <div class="quarto-title-banner page-columns page-full">
+    <div class="quarto-title column-body">
+      <h1 class="title">Roman Borders</h1>
+          </div>
+
+    
+    <div class="quarto-title-meta-container">
+      <div class="quarto-title-meta-column-start">
+        
+        <div class="quarto-title-meta">
+
+                
+          
+                
+              </div>
+      </div>
+      <div class="quarto-title-meta-column-end quarto-other-formats-target">
+      </div>
+    </div>
+
+
+
+    <div class="quarto-other-links-text-target">
+    </div>  </div>
+</header><div id="quarto-content" class="page-columns page-rows-contents page-layout-article toc-left">
+<div id="quarto-sidebar-toc-left" class="sidebar toc-left">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#roman-boundary-data-inspection" id="toc-roman-boundary-data-inspection" class="nav-link active" data-scroll-target="#roman-boundary-data-inspection">Roman Boundary Data Inspection</a></li>
+  <li><a href="#inspect" id="toc-inspect" class="nav-link" data-scroll-target="#inspect">Inspect</a></li>
+  <li><a href="#maps" id="toc-maps" class="nav-link" data-scroll-target="#maps">Maps</a></li>
+  <li><a href="#overlapping-borders" id="toc-overlapping-borders" class="nav-link" data-scroll-target="#overlapping-borders">Overlapping Borders</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#more-maps-roman-empire-map" id="toc-more-maps-roman-empire-map" class="nav-link" data-scroll-target="#more-maps-roman-empire-map">More Maps “Roman Empire Map”</a></li>
+  <li><a href="#inspect-1" id="toc-inspect-1" class="nav-link" data-scroll-target="#inspect-1">Inspect</a></li>
+  <li><a href="#load-the-geojson-features-into-a-geodataframe" id="toc-load-the-geojson-features-into-a-geodataframe" class="nav-link" data-scroll-target="#load-the-geojson-features-into-a-geodataframe">Load the GeoJSON features into a GeoDataFrame</a></li>
+  <li><a href="#save-the-maps" id="toc-save-the-maps" class="nav-link" data-scroll-target="#save-the-maps">Save the Maps</a></li>
+  <li><a href="#section" id="toc-section" class="nav-link" data-scroll-target="#section"></a></li>
+  <li><a href="#final-maps" id="toc-final-maps" class="nav-link" data-scroll-target="#final-maps">Final Maps</a></li>
+  <li><a href="#overlapping-borders-1" id="toc-overlapping-borders-1" class="nav-link" data-scroll-target="#overlapping-borders-1">Overlapping Borders</a></li>
+  </ul>
+</nav>
+</div>
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+</div>
+<main class="content quarto-banner-title-block" id="quarto-document-content">      
+
+       <div id="c07984dd" class="cell markdown">
+<p>This file pulls in Maps of Rome</p>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [1]:</pre></div><div id="4b6ef5f9" class="cell" data-execution_count="1">
+<pre><code>import requests
+from pathlib import Path
+
+# ArcGIS Feature Service
+base_url = (
+    "https://services1.arcgis.com/GWbDzXVIBphv2Dgx/"
+    "ArcGIS/rest/services/Roman_Empire_Cultural_Shapefiles/"
+    "FeatureServer"
+)
+
+# Output directory
+output_dir = Path.cwd() / "roman_boundaries"
+output_dir.mkdir(exist_ok=True)
+
+# Historical boundary layers
+boundary_layers = {
+    "roman_60_BC": 26,
+    "roman_14_AD": 33,
+    "roman_69_AD": 28,
+    "roman_117_AD": 35,
+    "roman_200_AD": 31,
+    "roman_314_AD": 30
+}
+
+# Download each boundary
+for name, layer_id in boundary_layers.items():
+
+    url = f"{base_url}/{layer_id}/query"
+
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": 4326,
+        "f": "geojson"
+    }
+
+    response = requests.get(url, params=params, timeout=120)
+    response.raise_for_status()
+
+    # Save GeoJSON
+    output_file = output_dir / f"{name}.geojson"
+
+    with open(output_file, "wb") as file:
+        file.write(response.content)
+
+    print(f"Downloaded: {output_file}")</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_60_BC.geojson
+Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_14_AD.geojson
+Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_69_AD.geojson
+Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_117_AD.geojson
+Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_200_AD.geojson
+Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_314_AD.geojson</code></pre>
+</div>
+</div></div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [2]:</pre></div><div id="36026adb" class="cell" data-execution_count="2">
+<pre><code># Inspect the metadata for potentially useful historical layers
+
+candidate_layers = [10, 15, 19, 20, 24, 26, 28, 30, 31, 33, 35]
+
+for layer_id in candidate_layers:
+
+    url = f"{base_url}/{layer_id}"
+
+    response = requests.get(
+        url,
+        params={"f": "json"},
+        timeout=60
+    )
+
+    response.raise_for_status()
+    layer = response.json()
+
+    print("\nLayer:", layer_id)
+    print("Name:", layer.get("name"))
+    print("Geometry:", layer.get("geometryType"))
+    print("Description:", layer.get("description"))
+    print("Fields:", [
+        field["name"] for field in layer.get("fields", [])
+    ])</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Layer: 10
+Name: Roman_Empire_Around_AD_75
+Geometry: esriGeometryPolyline
+Description: 
+Fields: ['FID', 'Id', 'Shape__Length']
+
+Layer: 15
+Name: Provinces Post-Diocletian
+Geometry: esriGeometryPolyline
+Description: 
+Fields: ['FID', 'Id', 'Shape__Length']
+
+Layer: 19
+Name: ba_100_prov_boundaries
+Geometry: esriGeometryPolyline
+Description: 
+Fields: ['FID', 'Id', 'Shape__Length']
+
+Layer: 20
+Name: ba_100_provinces
+Geometry: esriGeometryPolyline
+Description: 
+Fields: ['FID', 'OBJECTID', 'FNODE_', 'TNODE_', 'LPOLY_', 'RPOLY_', 'LENGTH', 'PROVINCE10', 'PROVINCE_1', 'Shape_Leng', 'Shape__Length']
+
+Layer: 24
+Name: temp_conquest
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'Id', 'Shape__Area', 'Shape__Length']
+
+Layer: 26
+Name: roman_empire_bc_60_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'Region_name']
+
+Layer: 28
+Name: roman_empire_ad_69_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length']
+
+Layer: 30
+Name: roman_empire_diocletian_and_Constantine_314_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'Id', 'Shape__Area', 'Shape__Length']
+
+Layer: 31
+Name: roman_empire_ad_200_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length']
+
+Layer: 33
+Name: roman_empire_ad_14_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length']
+
+Layer: 35
+Name: roman_empire_ad_117_extent
+Geometry: esriGeometryPolygon
+Description: 
+Fields: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length']</code></pre>
+</div>
+</div></div>
+<div id="499d87b8" class="cell markdown">
+<section id="roman-boundary-data-inspection" class="level1">
+<h1>Roman Boundary Data Inspection</h1>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [3]:</pre></div><div id="3a38454b" class="cell" data-execution_count="3">
+<pre><code>import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# Locate the downloaded boundary files
+boundary_dir = Path.cwd() / "roman_boundaries"
+
+# Load each historical boundary
+roman_boundaries = {}
+
+for file in boundary_dir.glob("*.geojson"):
+
+    name = file.stem
+
+    gdf = gpd.read_file(file)
+
+    roman_boundaries[name] = gdf
+
+    print(f"\n{name}")
+    print("-" * 40)
+    print("Features:", len(gdf))
+    print("CRS:", gdf.crs)
+    print("Geometry types:", gdf.geom_type.value_counts().to_dict())
+    print("Columns:", gdf.columns.tolist())
+</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+roman_117_AD
+----------------------------------------
+Features: 112
+CRS: EPSG:4326
+Geometry types: {'Polygon': 112}
+Columns: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'geometry']
+
+roman_133_BC
+----------------------------------------
+Features: 1
+CRS: EPSG:4326
+Geometry types: {'MultiPolygon': 1}
+Columns: ['date', 'slug', 'label', 'part', 'method', 'area_km2', 'note', 'geometry']
+
+roman_14_AD
+----------------------------------------
+Features: 109
+CRS: EPSG:4326
+Geometry types: {'Polygon': 109}
+Columns: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'geometry']
+
+roman_200_AD
+----------------------------------------
+Features: 112
+CRS: EPSG:4326
+Geometry types: {'Polygon': 112}
+Columns: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'geometry']
+
+roman_264_BC
+----------------------------------------
+Features: 1
+CRS: EPSG:4326
+Geometry types: {'MultiPolygon': 1}
+Columns: ['date', 'slug', 'label', 'part', 'method', 'area_km2', 'note', 'geometry']
+
+roman_314_AD
+----------------------------------------
+Features: 111
+CRS: EPSG:4326
+Geometry types: {'Polygon': 111}
+Columns: ['FID', 'Id', 'Shape__Area', 'Shape__Length', 'geometry']
+
+roman_44_BC
+----------------------------------------
+Features: 1
+CRS: EPSG:4326
+Geometry types: {'MultiPolygon': 1}
+Columns: ['date', 'slug', 'label', 'part', 'method', 'area_km2', 'note', 'geometry']
+
+roman_60_BC
+----------------------------------------
+Features: 74
+CRS: EPSG:4326
+Geometry types: {'Polygon': 74}
+Columns: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'Region_name', 'geometry']
+
+roman_69_AD
+----------------------------------------
+Features: 110
+CRS: EPSG:4326
+Geometry types: {'Polygon': 110}
+Columns: ['FID', 'OBJECTID', 'AREA', 'PERIMETER', 'NEWDIO_', 'NEWDIO_ID', 'ID', 'Shape_Leng', 'Shape_Area', 'Shape__Area', 'Shape__Length', 'geometry']</code></pre>
+</div>
+</div></div>
+<div id="b24898fb" class="cell markdown">
+<section id="inspect" class="level2">
+<h2 class="anchored" data-anchor-id="inspect">Inspect</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [4]:</pre></div><div id="f8828d77" class="cell" data-execution_count="4">
+<pre><code># Inspect the 117 AD boundary as an example
+empire_117 = roman_boundaries["roman_117_AD"]
+
+# Display the first few records
+display(empire_117.head())
+
+# Inspect the geographic extent
+print("Geographic bounds:")
+print(empire_117.total_bounds)
+
+# Check geometry validity
+print("\nInvalid geometries:")
+print((~empire_117.geometry.is_valid).sum())
+
+# Check for missing geometries
+print("\nMissing geometries:")
+print(empire_117.geometry.isna().sum())</code></pre>
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">FID</th>
+<th data-quarto-table-cell-role="th">OBJECTID</th>
+<th data-quarto-table-cell-role="th">AREA</th>
+<th data-quarto-table-cell-role="th">PERIMETER</th>
+<th data-quarto-table-cell-role="th">NEWDIO_</th>
+<th data-quarto-table-cell-role="th">NEWDIO_ID</th>
+<th data-quarto-table-cell-role="th">ID</th>
+<th data-quarto-table-cell-role="th">Shape_Leng</th>
+<th data-quarto-table-cell-role="th">Shape_Area</th>
+<th data-quarto-table-cell-role="th">Shape__Area</th>
+<th data-quarto-table-cell-role="th">Shape__Length</th>
+<th data-quarto-table-cell-role="th">geometry</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>1</td>
+<td>1</td>
+<td>19.612703</td>
+<td>35.387086</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+<td>35.115167</td>
+<td>19.325197</td>
+<td>3.936093e+11</td>
+<td>4.710773e+06</td>
+<td>POLYGON ((-1.57431 55.16792, -1.50632 54.98433...</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>2</td>
+<td>2</td>
+<td>0.080670</td>
+<td>1.212228</td>
+<td>3</td>
+<td>0</td>
+<td>0</td>
+<td>1.212228</td>
+<td>0.080670</td>
+<td>1.710251e+09</td>
+<td>1.793546e+05</td>
+<td>POLYGON ((-4.59302 54.30514, -4.56152 54.34428...</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>3</td>
+<td>3</td>
+<td>0.006408</td>
+<td>0.311314</td>
+<td>4</td>
+<td>0</td>
+<td>0</td>
+<td>0.311314</td>
+<td>0.006408</td>
+<td>1.342642e+08</td>
+<td>4.419900e+04</td>
+<td>POLYGON ((-0.57376 53.75199, -0.60391 53.70755...</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>4</td>
+<td>4</td>
+<td>0.092548</td>
+<td>1.281687</td>
+<td>5</td>
+<td>0</td>
+<td>0</td>
+<td>1.281687</td>
+<td>0.092548</td>
+<td>1.918711e+09</td>
+<td>1.762884e+05</td>
+<td>POLYGON ((-4.60976 53.31895, -4.57282 53.35276...</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>5</td>
+<td>5</td>
+<td>0.005562</td>
+<td>0.312915</td>
+<td>6</td>
+<td>0</td>
+<td>0</td>
+<td>0.312915</td>
+<td>0.005562</td>
+<td>1.137296e+08</td>
+<td>4.447403e+04</td>
+<td>POLYGON ((1.68338 52.73775, 1.75385 52.69902, ...</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Geographic bounds:
+[-9.48732 22.89549 43.75164 55.16792]
+
+Invalid geometries:
+1
+
+Missing geometries:
+0</code></pre>
+</div>
+</div></div>
+<div id="dd48c8ff" class="cell markdown">
+<section id="maps" class="level2">
+<h2 class="anchored" data-anchor-id="maps">Maps</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [5]:</pre></div><div id="10c763f7" class="cell" data-execution_count="5">
+<pre><code># Create a 2 x 3 grid of maps
+fig, axes = plt.subplots(2, 3, figsize=(18, 11))
+
+axes = axes.flatten()
+
+for ax, (name, gdf) in zip(axes, roman_boundaries.items()):
+
+    gdf.plot(
+        ax=ax,
+        edgecolor="black",
+        linewidth=0.5
+    )
+
+    ax.set_title(name.replace("_", " ").upper())
+    ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()</code></pre>
+<div class="cell-output cell-output-display">
+<div class="">
+<figure class="figure">
+<p class=""><a href="borders_files/figure-html/cell-6-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="borders_files/figure-html/cell-6-output-1.png" width="1718" height="1037" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div></div>
+<div id="4ca5c1d6" class="cell markdown">
+<section id="overlapping-borders" class="level2">
+<h2 class="anchored" data-anchor-id="overlapping-borders">Overlapping Borders</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [6]:</pre></div><div id="e8aceb35" class="cell" data-execution_count="6">
+<pre><code>fig, ax = plt.subplots(figsize=(16, 10))
+
+for name, gdf in roman_boundaries.items():
+
+    gdf.boundary.plot(
+        ax=ax,
+        linewidth=1,
+        label=name.replace("_", " ")
+    )
+
+ax.set_title("Roman Territorial Boundaries Across Historical Periods")
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+ax.legend(loc="lower left")
+
+plt.show()
+</code></pre>
+<div class="cell-output cell-output-display">
+<div class="">
+<figure class="figure">
+<p class=""><a href="borders_files/figure-html/cell-7-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="borders_files/figure-html/cell-7-output-1.png" width="988" height="819" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div></div>
+<div id="7ebeca64" class="cell markdown">
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [7]:</pre></div><div id="4d20c8cd" class="cell" data-execution_count="7">
+<pre><code>boundary_summary = []
+
+for name, gdf in roman_boundaries.items():
+
+    boundary_summary.append({
+        "boundary": name,
+        "features": len(gdf),
+        "geometry_types": ", ".join(gdf.geom_type.unique()),
+        "crs": str(gdf.crs),
+        "min_lon": gdf.total_bounds[0],
+        "min_lat": gdf.total_bounds[1],
+        "max_lon": gdf.total_bounds[2],
+        "max_lat": gdf.total_bounds[3],
+        "invalid_geometries": int((~gdf.geometry.is_valid).sum())
+    })
+
+boundary_summary_df = pd.DataFrame(boundary_summary)
+
+display(boundary_summary_df)</code></pre>
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">boundary</th>
+<th data-quarto-table-cell-role="th">features</th>
+<th data-quarto-table-cell-role="th">geometry_types</th>
+<th data-quarto-table-cell-role="th">crs</th>
+<th data-quarto-table-cell-role="th">min_lon</th>
+<th data-quarto-table-cell-role="th">min_lat</th>
+<th data-quarto-table-cell-role="th">max_lon</th>
+<th data-quarto-table-cell-role="th">max_lat</th>
+<th data-quarto-table-cell-role="th">invalid_geometries</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>roman_117_AD</td>
+<td>112</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-9.48732</td>
+<td>22.89549</td>
+<td>43.75164</td>
+<td>55.167920</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>roman_133_BC</td>
+<td>1</td>
+<td>MultiPolygon</td>
+<td>EPSG:4326</td>
+<td>-7.33750</td>
+<td>33.99880</td>
+<td>25.60320</td>
+<td>46.422400</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>roman_14_AD</td>
+<td>109</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-9.48732</td>
+<td>22.89549</td>
+<td>39.27583</td>
+<td>54.418340</td>
+<td>1</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>roman_200_AD</td>
+<td>112</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-9.48732</td>
+<td>22.89549</td>
+<td>43.10774</td>
+<td>56.134778</td>
+<td>2</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>roman_264_BC</td>
+<td>1</td>
+<td>MultiPolygon</td>
+<td>EPSG:4326</td>
+<td>9.68730</td>
+<td>37.91900</td>
+<td>18.51740</td>
+<td>44.483000</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">5</td>
+<td>roman_314_AD</td>
+<td>111</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-9.48732</td>
+<td>22.89549</td>
+<td>41.32418</td>
+<td>55.035682</td>
+<td>1</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">6</td>
+<td>roman_44_BC</td>
+<td>1</td>
+<td>MultiPolygon</td>
+<td>EPSG:4326</td>
+<td>-7.33750</td>
+<td>30.79390</td>
+<td>38.58970</td>
+<td>52.560700</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">7</td>
+<td>roman_60_BC</td>
+<td>74</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-7.33747</td>
+<td>30.79395</td>
+<td>38.58975</td>
+<td>46.422390</td>
+<td>2</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">8</td>
+<td>roman_69_AD</td>
+<td>110</td>
+<td>Polygon</td>
+<td>EPSG:4326</td>
+<td>-9.48732</td>
+<td>22.89549</td>
+<td>40.64612</td>
+<td>54.418340</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div></div>
+<div id="440ae9f0" class="cell markdown">
+<section id="more-maps-roman-empire-map" class="level1">
+<h1>More Maps “Roman Empire Map”</h1>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [8]:</pre></div><div id="f250da2d" class="cell" data-execution_count="8">
+<pre><code># Roman Republican Boundaries: Additional Data Source
+
+import json
+
+# Source GeoJSON
+source_url = "https://tiles.romanempiremap.com/extents.geojson"
+
+# Save outside the roman_boundaries folder
+source_file = Path.cwd() / "roman_empire_map_extents_source.geojson"
+
+# Download source
+response = requests.get(source_url, timeout=120)
+response.raise_for_status()
+
+# Save original GeoJSON
+with open(source_file, "wb") as file:
+    file.write(response.content)
+
+print("Downloaded:", source_file)
+print("File size:", source_file.stat().st_size, "bytes")
+</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>Downloaded: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_empire_map_extents_source.geojson
+File size: 1181244 bytes</code></pre>
+</div>
+</div></div>
+<div id="412f6eb4" class="cell markdown">
+<section id="inspect-1" class="level2">
+<h2 class="anchored" data-anchor-id="inspect-1">Inspect</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [9]:</pre></div><div id="0f6816e3" class="cell" data-execution_count="9">
+<pre><code># Read the original GeoJSON
+
+with open(source_file, "r", encoding="utf-8") as file:
+    extent_data = json.load(file)
+
+# Inspect the structure
+print("GeoJSON type:", extent_data.get("type"))
+print("Total features:", len(extent_data["features"]))
+
+print("\nAvailable property fields:")
+
+print(
+    extent_data["features"][0]["properties"].keys()
+)
+
+print("\nFirst five features:")
+
+for feature in extent_data["features"][:5]:
+    print(feature["properties"])</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>GeoJSON type: FeatureCollection
+Total features: 18
+
+Available property fields:
+dict_keys(['date', 'slug', 'label', 'part', 'method', 'area_km2', 'note'])
+
+First five features:
+{'date': -753, 'slug': '753-bc', 'label': '753 BC', 'part': 'whole', 'method': 'city', 'area_km2': 7, 'note': 'Symbolic: a circle of 1.5 km radius around the Pleiades location of Rome. The early city is not mapped.'}
+{'date': -264, 'slug': '264-bc', 'label': '264 BC', 'part': 'whole', 'method': 'admin1', 'area_km2': 131515, 'note': 'Built from modern Italian provinces (Natural Earth admin-1), so the outline is coarse and follows modern boundaries.'}
+{'date': -133, 'slug': '133-bc', 'label': '133 BC', 'part': 'whole', 'method': 'provinces', 'area_km2': 805540, 'note': 'Provinces held at the date (AD 200 AWMC borders), clipped to the AWMC extent for 60 BC. Approximate; Republican control inland was patchy.'}
+{'date': -44, 'slug': '44-bc', 'label': '44 BC', 'part': 'whole', 'method': 'provinces', 'area_km2': 1972439, 'note': 'Provinces held at the date (AD 200 AWMC borders); provinces older than 60 BC are clipped to the AWMC extent for 60 BC. Client kingdoms are not counted.'}
+{'date': 14, 'slug': '14-ad', 'label': 'AD 14', 'part': 'whole', 'method': 'provinces', 'area_km2': 3665334, 'note': 'Provinces held at the death of Augustus (AD 200 AWMC borders). Client kingdoms are not counted.'}</code></pre>
+</div>
+</div></div>
+<div id="7b6f012f" class="cell markdown">
+<section id="load-the-geojson-features-into-a-geodataframe" class="level2">
+<h2 class="anchored" data-anchor-id="load-the-geojson-features-into-a-geodataframe">Load the GeoJSON features into a GeoDataFrame</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [10]:</pre></div><div id="84fd2689" class="cell" data-execution_count="10">
+<pre><code>source_gdf = gpd.read_file(source_file)
+
+print("Total source features:", len(source_gdf))
+print("Available dates:", sorted(source_gdf["date"].unique()))
+
+# Select Republican-period boundaries
+republican_dates = [-264, -133, -44]
+
+republican_boundaries = source_gdf[
+    (source_gdf["date"].isin(republican_dates))
+    &amp; (source_gdf["part"] == "whole")
+].copy()
+
+# Inspect selected boundaries
+display(
+    republican_boundaries[
+        ["date", "label", "method", "area_km2", "note", "geometry"]
+    ]
+)</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>Total source features: 18
+Available dates: [np.int32(-753), np.int32(-264), np.int32(-133), np.int32(-44), np.int32(14), np.int32(117), np.int32(211), np.int32(395), np.int32(476), np.int32(565), np.int32(1000), np.int32(1180), np.int32(1453)]</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">date</th>
+<th data-quarto-table-cell-role="th">label</th>
+<th data-quarto-table-cell-role="th">method</th>
+<th data-quarto-table-cell-role="th">area_km2</th>
+<th data-quarto-table-cell-role="th">note</th>
+<th data-quarto-table-cell-role="th">geometry</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">1</td>
+<td>-264</td>
+<td>264 BC</td>
+<td>admin1</td>
+<td>131515</td>
+<td>Built from modern Italian provinces (Natural E...</td>
+<td>MULTIPOLYGON (((11.3657 42.4079, 11.3547 42.40...</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">2</td>
+<td>-133</td>
+<td>133 BC</td>
+<td>provinces</td>
+<td>805540</td>
+<td>Provinces held at the date (AD 200 AWMC border...</td>
+<td>MULTIPOLYGON (((25.5817 37.1566, 25.6032 37.11...</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">3</td>
+<td>-44</td>
+<td>44 BC</td>
+<td>provinces</td>
+<td>1972439</td>
+<td>Provinces held at the date (AD 200 AWMC border...</td>
+<td>MULTIPOLYGON (((27.0869 36.8569, 27.1789 36.89...</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div></div>
+<div id="3a1f45bc" class="cell markdown">
+<section id="save-the-maps" class="level2">
+<h2 class="anchored" data-anchor-id="save-the-maps">Save the Maps</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [11]:</pre></div><div id="0bf00139" class="cell" data-execution_count="11">
+<pre><code># Ensure output directory exists
+
+boundary_dir = Path.cwd() / "roman_boundaries"
+boundary_dir.mkdir(exist_ok=True)
+
+# Save each Republican boundary separately
+
+for _, row in republican_boundaries.iterrows():
+
+    # Convert date to filename
+    year = abs(int(row["date"]))
+
+    boundary_name = f"roman_{year}_BC"
+
+    # Create a single-feature GeoDataFrame
+    boundary_gdf = gpd.GeoDataFrame(
+        [row],
+        geometry="geometry",
+        crs=republican_boundaries.crs
+    )
+
+    # Standardize CRS
+    boundary_gdf = boundary_gdf.to_crs("EPSG:4326")
+
+    # Save GeoJSON
+    output_file = boundary_dir / f"{boundary_name}.geojson"
+
+    boundary_gdf.to_file(
+        output_file,
+        driver="GeoJSON"
+    )
+
+    print("Saved:", output_file)</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>Saved: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_264_BC.geojson
+Saved: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_133_BC.geojson
+Saved: C:\Users\PC\code\6750\roman_battles\Datacollection\roman_boundaries\roman_44_BC.geojson</code></pre>
+</div>
+</div></div>
+<div id="5fb4e258" class="cell markdown">
+<section id="section" class="level1">
+<h1></h1>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [12]:</pre></div><div id="7991ee91" class="cell" data-execution_count="12">
+<pre><code># Load all historical boundaries
+
+roman_boundaries = {}
+
+for file in boundary_dir.glob("*.geojson"):
+
+    name = file.stem
+
+    gdf = gpd.read_file(file)
+
+    roman_boundaries[name] = gdf
+
+    print(
+        name,
+        "| Features:", len(gdf),
+        "| CRS:", gdf.crs,
+        "| Geometry:", gdf.geom_type.unique()
+    )</code></pre>
+<div class="cell-output cell-output-stdout">
+<pre><code>roman_117_AD | Features: 112 | CRS: EPSG:4326 | Geometry: ['Polygon']
+roman_133_BC | Features: 1 | CRS: EPSG:4326 | Geometry: ['MultiPolygon']
+roman_14_AD | Features: 109 | CRS: EPSG:4326 | Geometry: ['Polygon']
+roman_200_AD | Features: 112 | CRS: EPSG:4326 | Geometry: ['Polygon']
+roman_264_BC | Features: 1 | CRS: EPSG:4326 | Geometry: ['MultiPolygon']
+roman_314_AD | Features: 111 | CRS: EPSG:4326 | Geometry: ['Polygon']
+roman_44_BC | Features: 1 | CRS: EPSG:4326 | Geometry: ['MultiPolygon']
+roman_60_BC | Features: 74 | CRS: EPSG:4326 | Geometry: ['Polygon']
+roman_69_AD | Features: 110 | CRS: EPSG:4326 | Geometry: ['Polygon']</code></pre>
+</div>
+</div></div>
+<div id="b8bf72c9" class="cell markdown">
+<section id="final-maps" class="level1">
+<h1>Final Maps</h1>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [13]:</pre></div><div id="21b7b499" class="cell" data-execution_count="13">
+<pre><code># Create a 3 x 3 grid of maps
+fig, axes = plt.subplots(3, 3, figsize=(18, 16))
+
+axes = axes.flatten()
+
+for ax, (name, gdf) in zip(axes, roman_boundaries.items()):
+
+    gdf.plot(
+        ax=ax,
+        edgecolor="black",
+        linewidth=0.5,
+        facecolor="#D9E2EC"
+    )
+
+    ax.set_title(name.replace("_", " ").upper())
+    ax.set_axis_off()
+
+plt.tight_layout()
+plt.show()</code></pre>
+<div class="cell-output cell-output-display">
+<div class="">
+<figure class="figure">
+<p class=""><a href="borders_files/figure-html/cell-14-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3"><img src="borders_files/figure-html/cell-14-output-1.png" width="1718" height="1499" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div></div>
+<div id="20069548" class="cell markdown">
+<section id="overlapping-borders-1" class="level2">
+<h2 class="anchored" data-anchor-id="overlapping-borders-1">Overlapping Borders</h2>
+</section>
+</div>
+<div class="cell-container"><div class="cell-decorator"><pre>In [14]:</pre></div><div id="8e4fd1ea" class="cell" data-execution_count="14">
+<pre><code>fig, ax = plt.subplots(figsize=(16, 10))
+
+for name, gdf in roman_boundaries.items():
+
+    gdf.boundary.plot(
+        ax=ax,
+        linewidth=1,
+        label=name.replace("_", " ")
+    )
+
+ax.set_title(
+    "Roman Territorial Boundaries Across Historical Periods",
+    fontsize=16
+)
+
+ax.set_xlabel("Longitude")
+ax.set_ylabel("Latitude")
+
+ax.legend(
+    loc="lower left",
+    fontsize=8
+)
+
+plt.tight_layout()
+plt.show()</code></pre>
+<div class="cell-output cell-output-display">
+<div class="">
+<figure class="figure">
+<p class=""><a href="borders_files/figure-html/cell-15-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4"><img src="borders_files/figure-html/cell-15-output-1.png" width="1148" height="951" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div></div>
+     </main>
+<!-- /main column -->  <script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    // For code content inside modals, clipBoardJS needs to be initialized with a container option
+    // TODO: Check when it could be a function (https://github.com/zenorocha/clipboard.js/issues/860)
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>  </div> <!-- /content -->  <script>var lightboxQuarto = GLightbox({"openEffect":"zoom","selector":".lightbox","closeEffect":"zoom","loop":false,"descPosition":"bottom"});
+(function() {
+  let previousOnload = window.onload;
+  window.onload = () => {
+    if (previousOnload) {
+      previousOnload();
+    }
+    lightboxQuarto.on('slide_before_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      const href = trigger.getAttribute('href');
+      if (href !== null) {
+        const imgEl = window.document.querySelector(`a[href="${href}"] img`);
+        if (imgEl !== null) {
+          const srcAttr = imgEl.getAttribute("src");
+          if (srcAttr && srcAttr.startsWith("data:")) {
+            slideConfig.href = srcAttr;
+          }
+        }
+      } 
+    });
+  
+    lightboxQuarto.on('slide_after_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(slideNode);
+      }
+    });
+  
+  };
+  
+})();
+          </script> 
+  
+</body></html>

@@ -4,6 +4,7 @@ project:
 
 manuscript:
   article: index.qmd
+  notebooks: []  
   code-links:
     - repo
     - text: Use This Template
@@ -16,6 +17,9 @@ format:
     df-print: kable
     css: "./style.css"
     mainfont: "Caslon, serif"
+    toc: true
+    number-sections: true
+    embed-resources: true    
   pdf: default
   # docx: default
   # jats: default
