@@ -22,7 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Explicit project root
-project_root = Path(r"C:\Users\PC\code\6750\Final Project")
+project_root = Path(r"C:\Users\PC\code\6750\Roman_Battles")
 
 # Data directory
 data_dir = project_root / "Datacollection"
@@ -72,6 +72,28 @@ print(battle_locations_df.columns.tolist())
 
 print("\nSettlement columns:")
 print(settlements_gdf.columns.tolist())
+
+def save_figure(fig, folder, filename):
+    """
+    Save a figure as a high-resolution PNG
+    and close it after saving.
+    """
+
+    output_path = folder / filename
+
+    fig.savefig(
+        output_path,
+        dpi=300,
+        bbox_inches="tight",
+        facecolor=ROMAN["parchment"]
+    )
+
+    plt.close(fig)
+
+    print("Saved:", output_path)
+
+
+# 
 
 ```
 
@@ -967,6 +989,16 @@ ax.legend(loc="upper right")
 ax.set_aspect("equal")
 
 plt.tight_layout()
+# --------------------------------------------------
+# Save settlement intensity map
+# --------------------------------------------------
+
+save_figure(
+    fig,
+    visualization_dir,
+    "17_pleiades_settlement_intensity_full_dataset.png"
+)
+
 plt.show()
 ```
 
@@ -3406,6 +3438,12 @@ fig.suptitle(
 plt.tight_layout()
 plt.show()
 
+plt.savefig(
+    "visualization/battle_feature_proximity.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
 ```
 
 
@@ -4035,6 +4073,27 @@ plt.show()
 
 ```
 
+
+### Test
+
+```{python}
+display(
+    model_comparison_df[
+        [
+            "model",
+            "classification",
+            "observed_km",
+            "expected_km",
+            "observed_expected_ratio",
+            "simulation_2.5_percentile",
+            "simulation_97.5_percentile",
+            "two_sided_p_value"
+        ]
+    ].round(3)
+)
+
+```
+
 ## Plotting
 
 ### Select representative simulations
@@ -4078,5 +4137,1216 @@ for classification in [
 
 ```{python}
 
+
+```
+
+
+# Visualizations
+
+As I was making this file, I did not think to capture the visualizations in the way I wanted to make it easy to lead into the final output.  These are pulled together here once I knew the direction of my analysis
+
+
+## Set up
+
+```{python}
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from shapely.geometry import Point
+from shapely import contains_xy
+
+# --------------------------------------------------
+# 1. Output folders
+# --------------------------------------------------
+
+visualization_dir = project_root / "visualization"
+images_dir = project_root / "images"
+tables_dir = project_root / "tables"
+
+for folder in [visualization_dir, images_dir, tables_dir]:
+    folder.mkdir(parents=True, exist_ok=True)
+
+# --------------------------------------------------
+# 2. Roman-inspired color palette
+# --------------------------------------------------
+
+ROMAN = {
+    "parchment": "#F5F1E8",
+    "navy": "#041E42",
+    "red": "#8B1E2D",
+    "gold": "#C6A15B",
+    "stone": "#A6A198",
+    "light_blue": "#B8C9D9",
+    "teal": "#52796F",
+    "dark": "#292724",
+    "white": "#FFFFFF"
+}
+
+# --------------------------------------------------
+# 3. Matplotlib theme
+# --------------------------------------------------
+
+plt.rcParams.update({
+    "figure.facecolor": ROMAN["parchment"],
+    "axes.facecolor": ROMAN["parchment"],
+    "savefig.facecolor": ROMAN["parchment"],
+    "axes.edgecolor": ROMAN["stone"],
+    "axes.labelcolor": ROMAN["dark"],
+    "text.color": ROMAN["dark"],
+    "xtick.color": ROMAN["dark"],
+    "ytick.color": ROMAN["dark"],
+    "font.family": "serif",
+    "axes.titleweight": "bold",
+    "axes.titlesize": 13,
+    "axes.labelsize": 10,
+    "legend.frameon": False,
+    "figure.dpi": 120,
+    "savefig.dpi": 300,
+    "savefig.bbox": "tight"
+})
+
+# --------------------------------------------------
+# 4. Figure-saving helper
+# --------------------------------------------------
+
+def save_figure(fig, folder, filename):
+    """
+    Save a figure as a high-resolution PNG
+    and close it after saving.
+    """
+
+    output_path = folder / filename
+
+    fig.savefig(
+        output_path,
+        dpi=300,
+        bbox_inches="tight",
+        facecolor=ROMAN["parchment"]
+    )
+
+    plt.close(fig)
+
+    print("Saved:", output_path)
+
+
+# --------------------------------------------------
+# 5. Map formatting helper
+# --------------------------------------------------
+
+def format_map(ax, title):
+    ax.set_title(
+        title,
+        fontsize=14,
+        fontweight="bold",
+        color=ROMAN["navy"],
+        pad=12
+    )
+
+    ax.set_axis_off()
+    ax.set_aspect("equal")
+
+print("Output folders and Roman theme are ready.")
+
+# Load Natural Earth physical land polygons (no modern country boundaries)
+land_url = (
+    "https://naturalearth.s3.amazonaws.com/110m_physical/"
+    "ne_110m_land.zip"
+)
+
+world_land_gdf = gpd.read_file(land_url).to_crs(metric_crs)
+
+
+# Prepare the maximum Roman territorial extent (117 AD)
+roman_117_gdf = gpd.GeoDataFrame(
+    geometry=[boundary_territories["roman_117_AD"]],
+    crs=metric_crs
+)
+
+
+def add_map_background(ax):
+    """
+    Add physical geography and the Roman Empire at its greatest extent.
+    """
+
+    # Ocean
+    ax.set_facecolor("#DCE5E8")
+
+    # Physical land, without modern political boundaries
+    world_land_gdf.plot(
+        ax=ax,
+        color="#E8E2D5",
+        edgecolor="#B8B1A3",
+        linewidth=0.35,
+        zorder=0
+    )
+
+    # Roman Empire at its greatest territorial extent
+    roman_117_gdf.plot(
+        ax=ax,
+        color="#C6A15B",
+        edgecolor="#8B1E2D",
+        linewidth=0.8,
+        alpha=0.22,
+        zorder=1
+    )
+
+    # Determine extent using both the study area and Roman territory
+    combined_geometry = (
+        study_area_gdf.geometry.union_all()
+        .union(boundary_territories["roman_117_AD"])
+    )
+
+    minx, miny, maxx, maxy = combined_geometry.bounds
+
+    x_margin = (maxx - minx) * 0.04
+    y_margin = (maxy - miny) * 0.04
+
+    ax.set_xlim(minx - x_margin, maxx + x_margin)
+    ax.set_ylim(miny - y_margin, maxy + y_margin)
+
+
+```
+
+
+## Spatial randomness
+
+```{python}
+## Spatial randomness
+
+fig, ax = plt.subplots(figsize=(13, 10))
+
+# Physical geography and maximum Roman extent
+add_map_background(ax)
+
+# Study area boundary
+study_area_gdf.boundary.plot(
+    ax=ax,
+    color=ROMAN["gold"],
+    linewidth=1.2,
+    zorder=2
+)
+
+# Observed battle locations
+battle_border_gdf.plot(
+    ax=ax,
+    color=ROMAN["red"],
+    markersize=13,
+    alpha=0.75,
+    edgecolor=ROMAN["white"],
+    linewidth=0.25,
+    zorder=3
+)
+
+format_map(
+    ax,
+    "Geographic Distribution of Recorded Roman Battles"
+)
+
+ax.legend(
+    handles=[
+        Line2D(
+            [0], [0],
+            color="#8B1E2D",
+            linewidth=1.5,
+            label="Roman Empire (117 AD)"
+        ),
+        Line2D(
+            [0], [0],
+            color=ROMAN["gold"],
+            linewidth=1.5,
+            label="Study area boundary"
+        ),
+        Line2D(
+            [0], [0],
+            marker="o",
+            color="none",
+            markerfacecolor=ROMAN["red"],
+            markeredgecolor=ROMAN["white"],
+            markersize=8,
+            label="Observed battles"
+        )
+    ],
+    loc="lower left"
+)
+
+save_figure(
+    fig,
+    visualization_dir,
+    "01_observed_battle_locations.png"
+)
+
+fig
+```
+
+## Separate settlement-intensity maps for all nine periods
+Error come back and fix
+
+```{python}
+# --------------------------------------------------
+# Settlement KDE: one image per historical period
+# --------------------------------------------------
+
+# Use one shared intensity scale across all periods
+all_intensities = np.concatenate([
+    surface["intensity_grid"][
+        np.isfinite(surface["intensity_grid"])
+    ]
+    for surface in settlement_intensity_surfaces.values()
+])
+
+shared_vmin = all_intensities.min()
+shared_vmax = all_intensities.max()
+
+for period, surface in settlement_intensity_surfaces.items():
+
+    fig, ax = plt.subplots(figsize=(11, 9))
+
+    image = ax.imshow(
+        surface["intensity_grid"],
+        origin="lower",
+        extent=[
+            grid_x[0] / 1000,
+            grid_x[-1] / 1000,
+            grid_y[0] / 1000,
+            grid_y[-1] / 1000
+        ],
+        cmap="YlOrBr",
+        vmin=shared_vmin,
+        vmax=shared_vmax,
+        aspect="equal"
+    )
+
+    # Study-area outline
+    study_area_gdf.boundary.plot(
+        ax=ax,
+        color=ROMAN["dark"],
+        linewidth=0.6
+    )
+
+    ax.set_title(
+        f"Settlement Intensity: {period}",
+        color=ROMAN["navy"],
+        fontweight="bold"
+    )
+
+    ax.set_xlabel("Easting (km)")
+    ax.set_ylabel("Northing (km)")
+
+    fig.colorbar(
+        image,
+        ax=ax,
+        label="Estimated settlement intensity"
+    )
+
+    plt.tight_layout()
+
+    save_figure(
+        fig,
+        visualization_dir,
+        f"11_settlement_intensity_{period}.png"
+    )
+
+```
+
+## Separate observed-versus-simulated settlement maps
+
+```{python}
+# --------------------------------------------------
+# Settlement model: observed vs. simulated maps
+# One image per historical period
+# --------------------------------------------------
+
+for period in boundary_years:
+
+    observed_period = battle_border_gdf[
+        battle_border_gdf["boundary_period"] == period
+    ]
+
+    simulated_period = simulated_battles_map[
+        simulated_battles_map["boundary_period"] == period
+    ]
+
+    fig, ax = plt.subplots(figsize=(12, 9))
+
+    add_map_background(ax)
+
+    # Historical territorial perimeter
+    perimeter_gdf = gpd.GeoDataFrame(
+        geometry=[boundary_perimeters[period]],
+        crs=metric_crs
+    )
+
+    perimeter_gdf.boundary.plot(
+        ax=ax,
+        color=ROMAN["gold"],
+        linewidth=1.2,
+        zorder=2
+    )
+
+    # Simulated locations
+    if len(simulated_period) > 0:
+        simulated_period.plot(
+            ax=ax,
+            color=ROMAN["light_blue"],
+            markersize=20,
+            alpha=0.65,
+            edgecolor=ROMAN["navy"],
+            linewidth=0.25,
+            zorder=3
+        )
+
+    # Observed locations
+    if len(observed_period) > 0:
+        observed_period.plot(
+            ax=ax,
+            color=ROMAN["red"],
+            markersize=28,
+            marker="x",
+            linewidth=1.2,
+            zorder=4
+        )
+
+    format_map(
+        ax,
+        f"Observed vs. Settlement-Simulated Battles: {period}"
+    )
+
+    ax.legend(
+        handles=[
+            Line2D(
+                [0], [0],
+                marker="x",
+                color=ROMAN["red"],
+                linestyle="None",
+                markersize=8,
+                label="Observed battles"
+            ),
+            Line2D(
+                [0], [0],
+                marker="o",
+                color=ROMAN["light_blue"],
+                markeredgecolor=ROMAN["navy"],
+                linestyle="None",
+                markersize=8,
+                label="Simulated battles"
+            ),
+            Line2D(
+                [0], [0],
+                color=ROMAN["gold"],
+                linewidth=1.5,
+                label="Historical perimeter"
+            )
+        ],
+        loc="lower left"
+    )
+
+    ax.set_title(
+        f"Observed: {len(observed_period)} | "
+        f"Simulated: {len(simulated_period)}",
+        fontsize=10,
+        color=ROMAN["dark"],
+        pad=4
+    )
+
+    save_figure(
+        fig,
+        visualization_dir,
+        f"12_settlement_observed_vs_simulated_{period}.png"
+    )
+```
+
+## Period-specific border simulation distributions
+
+```{python}
+# --------------------------------------------------
+# Border model: one distribution plot per period
+# --------------------------------------------------
+
+for period in boundary_years:
+
+    # Skip periods without observed battles
+    if observed_battle_counts[period] == 0:
+        continue
+
+    observed_mean = observed_border_means[period]
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    for decay_distance in decay_distances:
+
+        simulations = border_model_results[
+            (period, decay_distance)
+        ]
+
+        ax.hist(
+            simulations,
+            bins=30,
+            density=True,
+            alpha=0.35,
+            label=f"{decay_distance / 1000:.0f} km decay"
+        )
+
+    ax.axvline(
+        observed_mean,
+        color=ROMAN["red"],
+        linestyle="--",
+        linewidth=2.5,
+        label=f"Observed: {observed_mean:.1f} km"
+    )
+
+    ax.set_title(
+        f"Border-Weighted Simulations: {period}",
+        color=ROMAN["navy"],
+        fontweight="bold"
+    )
+
+    ax.set_xlabel("Mean distance to historical perimeter (km)")
+    ax.set_ylabel("Density")
+    ax.legend()
+
+    ax.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+
+    save_figure(
+        fig,
+        visualization_dir,
+        f"13_border_simulations_{period}.png"
+    )
+
+```
+
+
+## Classification-specific border simulations by period
+
+```{python}
+# --------------------------------------------------
+# Classification-specific border simulations
+# One image per classification and historical period
+# --------------------------------------------------
+
+for classification in ["External", "Civil Conflict"]:
+
+    for period in boundary_years:
+
+        n_battles = observed_group_counts[classification][period]
+
+        if n_battles == 0:
+            continue
+
+        observed_mean = observed_group_means[classification][period]
+
+        fig, ax = plt.subplots(figsize=(11, 6))
+
+        for decay_distance in decay_distances:
+
+            simulations = classification_border_results[
+                (classification, period, decay_distance)
+            ]
+
+            ax.hist(
+                simulations,
+                bins=30,
+                density=True,
+                alpha=0.35,
+                label=f"{decay_distance / 1000:.0f} km decay"
+            )
+
+        ax.axvline(
+            observed_mean,
+            color=ROMAN["red"],
+            linestyle="--",
+            linewidth=2.5,
+            label=f"Observed: {observed_mean:.1f} km"
+        )
+
+        ax.set_title(
+            f"{classification}: Border Simulations — {period}",
+            color=ROMAN["navy"],
+            fontweight="bold"
+        )
+
+        ax.set_xlabel("Mean distance to historical perimeter (km)")
+        ax.set_ylabel("Density")
+        ax.legend()
+
+        ax.spines[["top", "right"]].set_visible(False)
+
+        plt.tight_layout()
+
+        filename_class = classification.lower().replace(" ", "_")
+
+        save_figure(
+            fig,
+            visualization_dir,
+            f"14_border_{filename_class}_{period}.png"
+        )
+
+```
+
+## Compare observed border distances across periods
+
+```{python}
+# --------------------------------------------------
+# Observed border distances across historical periods
+# --------------------------------------------------
+
+border_plot_df = border_distance_summary.copy()
+
+border_plot_df["boundary_period"] = pd.Categorical(
+    border_plot_df["boundary_period"],
+    categories=list(boundary_years.keys()),
+    ordered=True
+)
+
+border_plot_df = border_plot_df.sort_values("boundary_period")
+
+x = np.arange(len(border_plot_df))
+
+fig, ax = plt.subplots(figsize=(13, 6))
+
+ax.plot(
+    x,
+    border_plot_df["mean_distance_km"],
+    marker="o",
+    linewidth=2,
+    color=ROMAN["red"],
+    label="Mean distance"
+)
+
+ax.plot(
+    x,
+    border_plot_df["median_distance_km"],
+    marker="s",
+    linewidth=2,
+    linestyle="--",
+    color=ROMAN["navy"],
+    label="Median distance"
+)
+
+ax.set_xticks(x)
+ax.set_xticklabels(
+    border_plot_df["boundary_period"],
+    rotation=35,
+    ha="right"
+)
+
+ax.set_ylabel("Distance to historical perimeter (km)")
+ax.set_title(
+    "Observed Battle Distances to Roman Territorial Perimeters",
+    color=ROMAN["navy"],
+    fontweight="bold"
+)
+
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "15_observed_border_distances_by_period.png"
+)
+
+```
+
+
+## Specialized infrastructure Map
+
+```{python}
+# --------------------------------------------------
+# Specialized infrastructure: combined feature map
+# Small SVG silhouette icons
+# --------------------------------------------------
+
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.lines import Line2D
+
+from pathlib import Path
+from io import BytesIO
+
+import requests
+import cairosvg
+import numpy as np
+
+
+# --------------------------------------------------
+# Colors
+# --------------------------------------------------
+
+classification_colors = {
+    "External": ROMAN["red"],
+    "Civil Conflict": ROMAN["navy"]
+}
+
+feature_colors = {
+    "Forts": ROMAN["red"],
+    "Ports": ROMAN["teal"],
+    "Temples": ROMAN["gold"],
+    "Entertainment": ROMAN["stone"]
+}
+
+
+# --------------------------------------------------
+# Define SVG icon sources
+# --------------------------------------------------
+
+icon_sources = {
+    "Forts": "chess-rook",
+    "Ports": "anchor",
+    "Temples": "landmark",
+    "Entertainment": "archway"
+}
+
+# Store downloaded icons in the project
+icon_dir = Path(visualization_dir) / "icons"
+icon_dir.mkdir(parents=True, exist_ok=True)
+
+
+# --------------------------------------------------
+# Download and prepare SVG icons
+# --------------------------------------------------
+
+icon_images = {}
+
+for category, icon_name in icon_sources.items():
+
+    icon_path = icon_dir / f"{icon_name}.svg"
+
+    # Download icon if it is not already saved
+    if not icon_path.exists():
+
+        icon_url = (
+            "https://raw.githubusercontent.com/"
+            "FortAwesome/Font-Awesome/6.x/"
+            f"svgs/solid/{icon_name}.svg"
+        )
+
+        response = requests.get(icon_url, timeout=30)
+        response.raise_for_status()
+
+        icon_path.write_bytes(response.content)
+
+    # Read SVG
+    svg_content = icon_path.read_text(encoding="utf-8")
+
+    # Apply category color
+    svg_content = svg_content.replace(
+        "currentColor",
+        feature_colors[category]
+    )
+
+    # Convert SVG to transparent PNG
+    png_data = cairosvg.svg2png(
+        bytestring=svg_content.encode("utf-8"),
+        output_width=64,
+        output_height=64
+    )
+
+    # Load PNG into memory
+    icon_images[category] = mpimg.imread(
+        BytesIO(png_data),
+        format="png"
+    )
+
+
+# --------------------------------------------------
+# Create combined map
+# --------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(15, 11))
+
+add_map_background(ax)
+
+
+# --------------------------------------------------
+# Plot specialized infrastructure
+# --------------------------------------------------
+
+# Controls the size of the icons
+icon_zoom = 0.16
+
+for category, feature_types in feature_categories.items():
+
+    feature_subset = settlements_projected[
+        settlements_projected["FEATURETYP"].isin(feature_types)
+    ].copy()
+
+    feature_subset = feature_subset[
+        feature_subset.geometry.notna()
+        & ~feature_subset.geometry.is_empty
+    ]
+
+    for point in feature_subset.geometry:
+
+        icon = OffsetImage(
+            icon_images[category],
+            zoom=icon_zoom
+        )
+
+        annotation = AnnotationBbox(
+            icon,
+            (point.x, point.y),
+            frameon=False,
+            pad=0
+        )
+
+        annotation.set_zorder(3)
+
+        ax.add_artist(annotation)
+
+
+# --------------------------------------------------
+# Plot observed battles by classification
+# --------------------------------------------------
+
+for classification, color in classification_colors.items():
+
+    battles = battle_groups[classification]
+
+    if len(battles) > 0:
+
+        battles.plot(
+            ax=ax,
+            color=color,
+            markersize=18,
+            alpha=0.75,
+            edgecolor=ROMAN["white"],
+            linewidth=0.3,
+            zorder=4
+        )
+
+
+# --------------------------------------------------
+# Map title and legend
+# --------------------------------------------------
+
+format_map(
+    ax,
+    "Roman Battles and Specialized Infrastructure"
+)
+
+legend_handles = []
+
+# Infrastructure legend
+for category, color in feature_colors.items():
+
+    legend_handles.append(
+        Line2D(
+            [0], [0],
+            marker="o",
+            color=color,
+            markerfacecolor=color,
+            markeredgecolor=color,
+            linestyle="None",
+            markersize=6,
+            label=category
+        )
+    )
+
+# Battle legend
+for classification, color in classification_colors.items():
+
+    legend_handles.append(
+        Line2D(
+            [0], [0],
+            marker="o",
+            color=color,
+            markerfacecolor=color,
+            markeredgecolor=ROMAN["white"],
+            linestyle="None",
+            markersize=7,
+            label=f"{classification} battles"
+        )
+    )
+
+ax.legend(
+    handles=legend_handles,
+    loc="lower left",
+    fontsize=9,
+    frameon=True,
+    framealpha=0.95
+)
+
+
+# --------------------------------------------------
+# Save map
+# --------------------------------------------------
+
+save_figure(
+    fig,
+    visualization_dir,
+    "16_combined_infrastructure_map.png"
+)
+
+```
+
+## Final infrastructure model: separate simulation distributions
+
+```{python}
+# --------------------------------------------------
+# Roman battles and specialized infrastructure
+# Traditional map symbols
+# --------------------------------------------------
+
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+
+# --------------------------------------------------
+# Colors
+# --------------------------------------------------
+
+# Battle classifications
+classification_colors = {
+    "External": ROMAN["red"],
+    "Civil Conflict": ROMAN["navy"]
+}
+
+# Infrastructure categories
+feature_colors = {
+    "Forts": "#52796F",
+    "Ports": "#4C78A8",
+    "Temples": "#C6A15B",
+    "Entertainment": "#8B6F9C"
+}
+
+
+# --------------------------------------------------
+# Create combined map
+# --------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(15, 11))
+
+add_map_background(ax)
+
+
+# --------------------------------------------------
+# Plot specialized infrastructure
+# --------------------------------------------------
+
+for category, feature_types in feature_categories.items():
+
+    feature_subset = settlements_projected[
+        settlements_projected["FEATURETYP"].isin(feature_types)
+    ].copy()
+
+    feature_subset = feature_subset[
+        feature_subset.geometry.notna()
+        & ~feature_subset.geometry.is_empty
+    ]
+
+    if len(feature_subset) > 0:
+
+        feature_subset.plot(
+            ax=ax,
+            color=feature_colors[category],
+            markersize=13,
+            alpha=0.8,
+            edgecolor=ROMAN["white"],
+            linewidth=0.35,
+            zorder=3
+        )
+
+
+# --------------------------------------------------
+# Plot observed battles by classification
+# --------------------------------------------------
+
+for classification, color in classification_colors.items():
+
+    battles = battle_groups[classification]
+
+    if len(battles) > 0:
+
+        battles.plot(
+            ax=ax,
+            color=color,
+            marker="x",
+            markersize=35,
+            alpha=0.9,
+            linewidth=1.2,
+            zorder=4
+        )
+
+
+# --------------------------------------------------
+# Map title
+# --------------------------------------------------
+
+format_map(
+    ax,
+    "Roman Battles and Specialized Infrastructure"
+)
+
+
+# --------------------------------------------------
+# Create separate legend sections
+# --------------------------------------------------
+
+# Battle legend
+battle_legend = [
+    Line2D(
+        [0], [0],
+        marker="x",
+        color="none",
+        markeredgecolor=classification_colors["External"],
+        markersize=8,
+        linestyle="None",
+        label="External battles"
+    ),
+    Line2D(
+        [0], [0],
+        marker="x",
+        color="none",
+        markeredgecolor=classification_colors["Civil Conflict"],
+        markersize=8,
+        linestyle="None",
+        label="Civil Conflict battles"
+    )
+]
+
+# Infrastructure legend
+infrastructure_legend = [
+    Line2D(
+        [0], [0],
+        marker="o",
+        color="none",
+        markerfacecolor=color,
+        markeredgecolor=ROMAN["white"],
+        markersize=7,
+        linestyle="None",
+        label=category
+    )
+    for category, color in feature_colors.items()
+]
+
+
+# --------------------------------------------------
+# Create combined legend
+# --------------------------------------------------
+
+legend_handles = [
+
+    # Battle classifications
+    Line2D(
+        [0], [0],
+        marker="x",
+        color="none",
+        markeredgecolor=classification_colors["External"],
+        markersize=8,
+        linestyle="None",
+        label="External battles"
+    ),
+
+    Line2D(
+        [0], [0],
+        marker="x",
+        color="none",
+        markeredgecolor=classification_colors["Civil Conflict"],
+        markersize=8,
+        linestyle="None",
+        label="Civil Conflict battles"
+    ),
+
+    # Infrastructure categories
+    Line2D(
+        [0], [0],
+        color="none",
+        linestyle="None",
+        label=" "
+    ),
+
+    *[
+        Line2D(
+            [0], [0],
+            marker="o",
+            color="none",
+            markerfacecolor=color,
+            markeredgecolor=ROMAN["white"],
+            markersize=7,
+            linestyle="None",
+            label=category
+        )
+        for category, color in feature_colors.items()
+    ]
+]
+
+
+# --------------------------------------------------
+# Add legend
+# --------------------------------------------------
+
+ax.legend(
+    handles=legend_handles,
+    title="Map Legend",
+    loc="lower left",
+    fontsize=9,
+    title_fontsize=10,
+    frameon=True,
+    framealpha=0.95
+)
+
+
+# --------------------------------------------------
+# Save map
+# --------------------------------------------------
+
+save_figure(
+    fig,
+    visualization_dir,
+    "16_combined_infrastructure_map.png"
+)
+
+fig
+
+```
+
+
+## Final infrastructure model: observed-to-expected ratios
+
+```{python}
+# --------------------------------------------------
+# Final infrastructure model: observed/expected ratios
+# --------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(12, 7))
+
+for classification, color in [
+    ("External", ROMAN["red"]),
+    ("Civil Conflict", ROMAN["navy"]),
+    ("All Battles", ROMAN["teal"])
+]:
+
+    subset = model_comparison_df[
+        model_comparison_df["classification"] == classification
+    ].copy()
+
+    # Keep models in the intended order
+    model_order = [
+        "Settlement",
+        "Infrastructure 25 km",
+        "Infrastructure 50 km",
+        "Infrastructure 100 km",
+        "Infrastructure 200 km"
+    ]
+
+    subset["model"] = pd.Categorical(
+        subset["model"],
+        categories=model_order,
+        ordered=True
+    )
+
+    subset = subset.sort_values("model")
+
+    ax.plot(
+        subset["model"].astype(str),
+        subset["observed_expected_ratio"],
+        marker="o",
+        linewidth=2,
+        color=color,
+        label=classification
+    )
+
+ax.axhline(
+    1,
+    color=ROMAN["dark"],
+    linestyle="--",
+    linewidth=1.2,
+    label="Observed = expected"
+)
+
+ax.set_ylabel("Observed / expected mean NN distance")
+ax.set_title(
+    "Observed-to-Expected Ratios Across Spatial Models",
+    color=ROMAN["navy"],
+    fontweight="bold"
+)
+
+ax.tick_params(axis="x", rotation=25)
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "19_final_model_observed_expected_ratios.png"
+)
+
+```
+
+## Final model: compare the expected distances across models
+
+```{python}
+# --------------------------------------------------
+# Final infrastructure model: expected distances
+# --------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(12, 7))
+
+for classification, color in [
+    ("External", ROMAN["red"]),
+    ("Civil Conflict", ROMAN["navy"]),
+    ("All Battles", ROMAN["teal"])
+]:
+
+    subset = model_comparison_df[
+        model_comparison_df["classification"] == classification
+    ].copy()
+
+    model_order = [
+        "Settlement",
+        "Infrastructure 25 km",
+        "Infrastructure 50 km",
+        "Infrastructure 100 km",
+        "Infrastructure 200 km"
+    ]
+
+    subset["model"] = pd.Categorical(
+        subset["model"],
+        categories=model_order,
+        ordered=True
+    )
+
+    subset = subset.sort_values("model")
+
+    ax.plot(
+        subset["model"].astype(str),
+        subset["expected_km"],
+        marker="o",
+        linewidth=2,
+        color=color,
+        label=classification
+    )
+
+ax.set_ylabel("Expected mean nearest-neighbor distance (km)")
+ax.set_title(
+    "Expected Battle Clustering Across Spatial Models",
+    color=ROMAN["navy"],
+    fontweight="bold"
+)
+
+ax.tick_params(axis="x", rotation=25)
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+
+save_figure(
+    fig,
+    visualization_dir,
+    "20_final_model_expected_distances.png"
+)
 
 ```
